@@ -1,0 +1,12 @@
+apiVersion: core.platform.f3nr1r.io/v1alpha1
+kind: TelemetryProfile
+metadata:
+  labels:
+    app.kubernetes.io/name: platform-governance-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: telemetryprofile-sample
+spec:
+  priority: 50
+  injectEnvVars: true
+  tracingEndpoint: "http://otel-collector.observability.svc.cluster.local:4317"
+  samplingRate: "0.5"

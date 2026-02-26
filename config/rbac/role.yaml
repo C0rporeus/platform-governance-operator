@@ -1,0 +1,38 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - core.platform.f3nr1r.io
+  resources:
+  - securitybaselines
+  - telemetryprofiles
+  - workloadpolicies
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - core.platform.f3nr1r.io
+  resources:
+  - securitybaselines/finalizers
+  - telemetryprofiles/finalizers
+  - workloadpolicies/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - core.platform.f3nr1r.io
+  resources:
+  - securitybaselines/status
+  - telemetryprofiles/status
+  - workloadpolicies/status
+  verbs:
+  - get
+  - patch
+  - update

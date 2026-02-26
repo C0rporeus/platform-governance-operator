@@ -1,0 +1,172 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-core-v1-pod
+  failurePolicy: Fail
+  name: mpod.kb.io
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-core-platform-f3nr1r-io-v1alpha1-securitybaseline
+  failurePolicy: Fail
+  name: msecuritybaseline-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.platform.f3nr1r.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - securitybaselines
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-core-platform-f3nr1r-io-v1alpha1-telemetryprofile
+  failurePolicy: Fail
+  name: mtelemetryprofile-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.platform.f3nr1r.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - telemetryprofiles
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-core-platform-f3nr1r-io-v1alpha1-workloadpolicy
+  failurePolicy: Fail
+  name: mworkloadpolicy-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.platform.f3nr1r.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - workloadpolicies
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-core-v1-pod
+  failurePolicy: Fail
+  name: vpod.kb.io
+  rules:
+  - apiGroups:
+    - ""
+    apiVersions:
+    - v1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - pods
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-core-platform-f3nr1r-io-v1alpha1-securitybaseline
+  failurePolicy: Fail
+  name: vsecuritybaseline-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.platform.f3nr1r.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - securitybaselines
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-core-platform-f3nr1r-io-v1alpha1-telemetryprofile
+  failurePolicy: Fail
+  name: vtelemetryprofile-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.platform.f3nr1r.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - telemetryprofiles
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-core-platform-f3nr1r-io-v1alpha1-workloadpolicy
+  failurePolicy: Fail
+  name: vworkloadpolicy-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.platform.f3nr1r.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - workloadpolicies
+  sideEffects: None

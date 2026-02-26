@@ -1,0 +1,18 @@
+apiVersion: core.platform.f3nr1r.io/v1alpha1
+kind: WorkloadPolicy
+metadata:
+  labels:
+    app.kubernetes.io/name: platform-governance-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: workloadpolicy-sample
+spec:
+  priority: 100
+  defaultRequests:
+    cpu: "100m"
+    memory: "128Mi"
+  defaultLimits:
+    cpu: "500m"
+    memory: "512Mi"
+  mandatoryLabels:
+    app.kubernetes.io/name: "sample-app"
+    app.kubernetes.io/team: "platform"

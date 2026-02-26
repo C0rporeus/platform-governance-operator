@@ -1,0 +1,12 @@
+apiVersion: core.platform.f3nr1r.io/v1alpha1
+kind: SecurityBaseline
+metadata:
+  labels:
+    app.kubernetes.io/name: platform-governance-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: securitybaseline-sample
+spec:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  excludedNamespaces:
+    - kube-system

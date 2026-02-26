@@ -34,6 +34,10 @@ func (m *PodMutator) InjectDecoder(d admission.Decoder) error {
 // +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create;update,versions=v1,name=mpod.kb.io,admissionReviewVersions=v1
 // nolint:gocyclo
 func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admission.Response {
+	if m.decoder == nil {
+		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("admission decoder is not initialized"))
+	}
+
 	pod := &corev1.Pod{}
 	err := m.decoder.Decode(req, pod)
 	if err != nil {
@@ -177,12 +181,15 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 }
 
 func SetupPodMutatorWebhookWithManager(mgr ctrl.Manager) error {
+	handler := &PodMutator{
+		Client: mgr.GetClient(),
+		//nolint:staticcheck // controller-runtime recorder migration pending
+		Recorder: mgr.GetEventRecorderFor("pod-mutator-webhook"),
+		decoder:  admission.NewDecoder(mgr.GetScheme()),
+	}
+
 	mgr.GetWebhookServer().Register("/mutate-core-v1-pod", &webhook.Admission{
-		Handler: &PodMutator{
-			Client: mgr.GetClient(),
-			//nolint:staticcheck // controller-runtime recorder migration pending
-			Recorder: mgr.GetEventRecorderFor("pod-mutator-webhook"),
-		},
+		Handler: handler,
 	})
 	return nil
 }

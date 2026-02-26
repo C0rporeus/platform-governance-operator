@@ -35,6 +35,10 @@ func (v *PodValidator) InjectDecoder(d admission.Decoder) error {
 // +kubebuilder:webhook:path=/validate-core-v1-pod,mutating=false,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create;update,versions=v1,name=vpod.kb.io,admissionReviewVersions=v1
 
 func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
+	if v.decoder == nil {
+		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("admission decoder is not initialized"))
+	}
+
 	pod := &corev1.Pod{}
 	err := v.decoder.Decode(req, pod)
 	if err != nil {
@@ -84,12 +88,15 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 }
 
 func SetupPodWebhookWithManager(mgr ctrl.Manager) error {
+	handler := &PodValidator{
+		Client: mgr.GetClient(),
+		//nolint:staticcheck // controller-runtime recorder migration pending
+		Recorder: mgr.GetEventRecorderFor("pod-validator-webhook"),
+		decoder:  admission.NewDecoder(mgr.GetScheme()),
+	}
+
 	mgr.GetWebhookServer().Register("/validate-core-v1-pod", &webhook.Admission{
-		Handler: &PodValidator{
-			Client: mgr.GetClient(),
-			//nolint:staticcheck // controller-runtime recorder migration pending
-			Recorder: mgr.GetEventRecorderFor("pod-validator-webhook"),
-		},
+		Handler: handler,
 	})
 	return nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"slices"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -49,15 +50,7 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 	}
 
 	for _, baseline := range baselines.Items {
-		// Logic to bypass excluded namespaces
-		excluded := false
-		for _, ns := range baseline.Spec.ExcludedNamespaces {
-			if req.Namespace == ns {
-				excluded = true
-				break
-			}
-		}
-		if excluded {
+		if slices.Contains(baseline.Spec.ExcludedNamespaces, req.Namespace) {
 			continue
 		}
 
@@ -93,7 +86,8 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 func SetupPodWebhookWithManager(mgr ctrl.Manager) error {
 	mgr.GetWebhookServer().Register("/validate-core-v1-pod", &webhook.Admission{
 		Handler: &PodValidator{
-			Client:   mgr.GetClient(),
+			Client: mgr.GetClient(),
+			//nolint:staticcheck // controller-runtime recorder migration pending
 			Recorder: mgr.GetEventRecorderFor("pod-validator-webhook"),
 		},
 	})

@@ -181,8 +181,9 @@ func main() {
 	}
 
 	if err := (&controller.SecurityBaselineReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		//nolint:staticcheck // controller-runtime recorder migration pending
 		Recorder: mgr.GetEventRecorderFor("securitybaseline-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "SecurityBaseline")
@@ -208,8 +209,9 @@ func main() {
 		}
 	}
 	if err := (&controller.WorkloadPolicyReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		//nolint:staticcheck // controller-runtime recorder migration pending
 		Recorder: mgr.GetEventRecorderFor("workloadpolicy-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "WorkloadPolicy")
@@ -223,8 +225,9 @@ func main() {
 		}
 	}
 	if err := (&controller.TelemetryProfileReconciler{
-		Client:   mgr.GetClient(),
-		Scheme:   mgr.GetScheme(),
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		//nolint:staticcheck // controller-runtime recorder migration pending
 		Recorder: mgr.GetEventRecorderFor("telemetryprofile-controller"),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "TelemetryProfile")

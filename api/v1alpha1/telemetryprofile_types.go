@@ -20,16 +20,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // TelemetryProfileSpec defines the desired state of TelemetryProfile
 type TelemetryProfileSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-	// The following markers will use OpenAPI v3 schema to validate the value
-	// More info: https://book.kubebuilder.io/reference/markers/crd-validation.html
-
 	// TracingEndpoint specifies the OpenTelemetry OTLP endpoint to inject
 	// +optional
 	TracingEndpoint string `json:"tracingEndpoint,omitempty"`
@@ -51,9 +43,6 @@ type TelemetryProfileSpec struct {
 
 // TelemetryProfileStatus defines the observed state of TelemetryProfile.
 type TelemetryProfileStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 

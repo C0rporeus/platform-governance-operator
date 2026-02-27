@@ -189,25 +189,6 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "SecurityBaseline")
 		os.Exit(1)
 	}
-	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err := webhookv1alpha1.SetupSecurityBaselineWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create webhook", "webhook", "SecurityBaseline")
-			os.Exit(1)
-		}
-		if err := webhookv1alpha1.SetupWorkloadPolicyWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create webhook", "webhook", "WorkloadPolicy")
-			os.Exit(1)
-		}
-		if err := corewebhook.SetupPodWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create webhook", "webhook", "Pod")
-			os.Exit(1)
-		}
-		if err := corewebhook.SetupPodMutatorWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create mutator webhook", "webhook", "Pod")
-			os.Exit(1)
-		}
-	}
 	if err := (&controller.WorkloadPolicyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -216,13 +197,6 @@ func main() {
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "Failed to create controller", "controller", "WorkloadPolicy")
 		os.Exit(1)
-	}
-	// nolint:goconst
-	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
-		if err := webhookv1alpha1.SetupWorkloadPolicyWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "Failed to create webhook", "webhook", "WorkloadPolicy")
-			os.Exit(1)
-		}
 	}
 	if err := (&controller.TelemetryProfileReconciler{
 		Client: mgr.GetClient(),
@@ -233,10 +207,25 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "TelemetryProfile")
 		os.Exit(1)
 	}
-	// nolint:goconst
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
+		if err := webhookv1alpha1.SetupSecurityBaselineWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create webhook", "webhook", "SecurityBaseline")
+			os.Exit(1)
+		}
+		if err := webhookv1alpha1.SetupWorkloadPolicyWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create webhook", "webhook", "WorkloadPolicy")
+			os.Exit(1)
+		}
 		if err := webhookv1alpha1.SetupTelemetryProfileWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "Failed to create webhook", "webhook", "TelemetryProfile")
+			os.Exit(1)
+		}
+		if err := corewebhook.SetupPodWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create webhook", "webhook", "Pod")
+			os.Exit(1)
+		}
+		if err := corewebhook.SetupPodMutatorWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create mutator webhook", "webhook", "Pod")
 			os.Exit(1)
 		}
 	}

@@ -34,6 +34,8 @@ func (v *PodValidator) InjectDecoder(d admission.Decoder) error {
 
 // +kubebuilder:webhook:path=/validate-core-v1-pod,mutating=false,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create;update,versions=v1,name=vpod.kb.io,admissionReviewVersions=v1
 
+// Handle validates an incoming Pod admission request against all SecurityBaselines
+// active in the request namespace. Returns Denied if any baseline rule is violated.
 func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	if v.decoder == nil {
 		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("admission decoder is not initialized"))
@@ -87,6 +89,9 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 	return admission.Allowed("")
 }
 
+// SetupPodWebhookWithManager registers the Pod validating webhook with the Manager.
+// Uses imperative registration (mgr.GetWebhookServer().Register) because core/v1
+// types are not CRDs and cannot use the kubebuilder declarative webhook builder.
 func SetupPodWebhookWithManager(mgr ctrl.Manager) error {
 	handler := &PodValidator{
 		Client: mgr.GetClient(),

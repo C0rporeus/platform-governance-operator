@@ -32,6 +32,10 @@ func (m *PodMutator) InjectDecoder(d admission.Decoder) error {
 }
 
 // +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create;update,versions=v1,name=mpod.kb.io,admissionReviewVersions=v1
+
+// Handle mutates an incoming Pod admission request by applying defaults from
+// WorkloadPolicy (labels, resource requests/limits) and injecting telemetry
+// environment variables from TelemetryProfile resources active in the namespace.
 // nolint:gocyclo
 func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	if m.decoder == nil {
@@ -180,6 +184,9 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
+// SetupPodMutatorWebhookWithManager registers the Pod mutating webhook with the Manager.
+// Uses imperative registration (mgr.GetWebhookServer().Register) because core/v1
+// types are not CRDs and cannot use the kubebuilder declarative webhook builder.
 func SetupPodMutatorWebhookWithManager(mgr ctrl.Manager) error {
 	handler := &PodMutator{
 		Client: mgr.GetClient(),

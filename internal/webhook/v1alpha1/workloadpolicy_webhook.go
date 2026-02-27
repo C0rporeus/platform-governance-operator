@@ -29,8 +29,6 @@ import (
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
 )
 
-// nolint:unused
-// log is for logging in this package.
 var workloadpolicylog = logf.Log.WithName("workloadpolicy-resource")
 
 // SetupWorkloadPolicyWebhookWithManager registers the webhook for WorkloadPolicy in the manager.
@@ -41,8 +39,6 @@ func SetupWorkloadPolicyWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
 // +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-workloadpolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=workloadpolicies,verbs=create;update,versions=v1alpha1,name=mworkloadpolicy-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // WorkloadPolicyCustomDefaulter struct is responsible for setting default values on the custom resource of the
@@ -50,9 +46,7 @@ func SetupWorkloadPolicyWebhookWithManager(mgr ctrl.Manager) error {
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
-type WorkloadPolicyCustomDefaulter struct {
-	// TODO(user): Add more fields as needed for defaulting
-}
+type WorkloadPolicyCustomDefaulter struct{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WorkloadPolicy.
 func (d *WorkloadPolicyCustomDefaulter) Default(_ context.Context, obj *corev1alpha1.WorkloadPolicy) error {
@@ -60,8 +54,6 @@ func (d *WorkloadPolicyCustomDefaulter) Default(_ context.Context, obj *corev1al
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
 // +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-workloadpolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=workloadpolicies,verbs=create;update,versions=v1alpha1,name=vworkloadpolicy-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // WorkloadPolicyCustomValidator struct is responsible for validating the WorkloadPolicy resource
@@ -69,9 +61,7 @@ func (d *WorkloadPolicyCustomDefaulter) Default(_ context.Context, obj *corev1al
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
-type WorkloadPolicyCustomValidator struct {
-	// TODO(user): Add more fields as needed for validation
-}
+type WorkloadPolicyCustomValidator struct{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type WorkloadPolicy.
 func (v *WorkloadPolicyCustomValidator) ValidateCreate(_ context.Context, obj *corev1alpha1.WorkloadPolicy) (admission.Warnings, error) {

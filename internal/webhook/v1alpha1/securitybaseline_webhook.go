@@ -28,8 +28,6 @@ import (
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
 )
 
-// nolint:unused
-// log is for logging in this package.
 var securitybaselinelog = logf.Log.WithName("securitybaseline-resource")
 
 // SetupSecurityBaselineWebhookWithManager registers the webhook for SecurityBaseline in the manager.
@@ -40,8 +38,6 @@ func SetupSecurityBaselineWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
 // +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-securitybaseline,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=create;update,versions=v1alpha1,name=msecuritybaseline-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // SecurityBaselineCustomDefaulter struct is responsible for setting default values on the custom resource of the
@@ -49,9 +45,7 @@ func SetupSecurityBaselineWebhookWithManager(mgr ctrl.Manager) error {
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
-type SecurityBaselineCustomDefaulter struct {
-	// TODO(user): Add more fields as needed for defaulting
-}
+type SecurityBaselineCustomDefaulter struct{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind SecurityBaseline.
 func (d *SecurityBaselineCustomDefaulter) Default(_ context.Context, obj *corev1alpha1.SecurityBaseline) error {
@@ -59,8 +53,6 @@ func (d *SecurityBaselineCustomDefaulter) Default(_ context.Context, obj *corev1
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
 // +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-securitybaseline,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=create;update,versions=v1alpha1,name=vsecuritybaseline-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // SecurityBaselineCustomValidator struct is responsible for validating the SecurityBaseline resource
@@ -68,9 +60,7 @@ func (d *SecurityBaselineCustomDefaulter) Default(_ context.Context, obj *corev1
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
-type SecurityBaselineCustomValidator struct {
-	// TODO(user): Add more fields as needed for validation
-}
+type SecurityBaselineCustomValidator struct{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type SecurityBaseline.
 func (v *SecurityBaselineCustomValidator) ValidateCreate(_ context.Context, obj *corev1alpha1.SecurityBaseline) (admission.Warnings, error) {

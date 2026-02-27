@@ -29,8 +29,6 @@ import (
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
 )
 
-// nolint:unused
-// log is for logging in this package.
 var telemetryprofilelog = logf.Log.WithName("telemetryprofile-resource")
 
 // SetupTelemetryProfileWebhookWithManager registers the webhook for TelemetryProfile in the manager.
@@ -41,8 +39,6 @@ func SetupTelemetryProfileWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// TODO(user): EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-
 // +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-telemetryprofile,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=telemetryprofiles,verbs=create;update,versions=v1alpha1,name=mtelemetryprofile-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // TelemetryProfileCustomDefaulter struct is responsible for setting default values on the custom resource of the
@@ -50,9 +46,7 @@ func SetupTelemetryProfileWebhookWithManager(mgr ctrl.Manager) error {
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as it is used only for temporary operations and does not need to be deeply copied.
-type TelemetryProfileCustomDefaulter struct {
-	// TODO(user): Add more fields as needed for defaulting
-}
+type TelemetryProfileCustomDefaulter struct{}
 
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind TelemetryProfile.
 func (d *TelemetryProfileCustomDefaulter) Default(_ context.Context, obj *corev1alpha1.TelemetryProfile) error {
@@ -60,8 +54,6 @@ func (d *TelemetryProfileCustomDefaulter) Default(_ context.Context, obj *corev1
 	return nil
 }
 
-// TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
-// NOTE: If you want to customise the 'path', use the flags '--defaulting-path' or '--validation-path'.
 // +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-telemetryprofile,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=telemetryprofiles,verbs=create;update,versions=v1alpha1,name=vtelemetryprofile-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // TelemetryProfileCustomValidator struct is responsible for validating the TelemetryProfile resource
@@ -69,9 +61,7 @@ func (d *TelemetryProfileCustomDefaulter) Default(_ context.Context, obj *corev1
 //
 // NOTE: The +kubebuilder:object:generate=false marker prevents controller-gen from generating DeepCopy methods,
 // as this struct is used only for temporary operations and does not need to be deeply copied.
-type TelemetryProfileCustomValidator struct {
-	// TODO(user): Add more fields as needed for validation
-}
+type TelemetryProfileCustomValidator struct{}
 
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type TelemetryProfile.
 func (v *TelemetryProfileCustomValidator) ValidateCreate(_ context.Context, obj *corev1alpha1.TelemetryProfile) (admission.Warnings, error) {

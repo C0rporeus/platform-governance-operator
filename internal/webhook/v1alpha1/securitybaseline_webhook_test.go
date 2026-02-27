@@ -21,7 +21,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
-	// TODO (user): Add any additional imports if needed
 )
 
 var _ = Describe("SecurityBaseline Webhook", func() {
@@ -36,51 +35,42 @@ var _ = Describe("SecurityBaseline Webhook", func() {
 		obj = &corev1alpha1.SecurityBaseline{}
 		oldObj = &corev1alpha1.SecurityBaseline{}
 		validator = SecurityBaselineCustomValidator{}
-		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
+		Expect(validator).NotTo(BeNil())
 		defaulter = SecurityBaselineCustomDefaulter{}
-		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
-		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
-		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-	})
-
-	AfterEach(func() {
-		// TODO (user): Add any teardown logic common to all tests
+		Expect(defaulter).NotTo(BeNil())
+		Expect(oldObj).NotTo(BeNil())
+		Expect(obj).NotTo(BeNil())
 	})
 
 	Context("When creating SecurityBaseline under Defaulting Webhook", func() {
-		// TODO (user): Add logic for defaulting webhooks
-		// Example:
-		// It("Should apply defaults when a required field is empty", func() {
-		//     By("simulating a scenario where defaults should be applied")
-		//     obj.SomeFieldWithDefault = ""
-		//     By("calling the Default method to apply defaults")
-		//     defaulter.Default(ctx, obj)
-		//     By("checking that the default values are set")
-		//     Expect(obj.SomeFieldWithDefault).To(Equal("default_value"))
-		// })
+		It("Should apply defaults without error", func() {
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+		})
 	})
 
 	Context("When creating or updating SecurityBaseline under Validating Webhook", func() {
-		// TODO (user): Add logic for validating webhooks
-		// Example:
-		// It("Should deny creation if a required field is missing", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = ""
-		//     Expect(validator.ValidateCreate(ctx, obj)).Error().To(HaveOccurred())
-		// })
-		//
-		// It("Should admit creation if all required fields are present", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = "valid_value"
-		//     Expect(validator.ValidateCreate(ctx, obj)).To(BeNil())
-		// })
-		//
-		// It("Should validate updates correctly", func() {
-		//     By("simulating a valid update scenario")
-		//     oldObj.SomeRequiredField = "updated_value"
-		//     obj.SomeRequiredField = "updated_value"
-		//     Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
-		// })
-	})
+		It("Should admit a valid SecurityBaseline", func() {
+			obj.Spec.RunAsNonRoot = true
+			obj.Spec.ReadOnlyRootFilesystem = true
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
 
+		It("Should deny creation with an empty excludedNamespaces entry", func() {
+			obj.Spec.ExcludedNamespaces = []string{""}
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Should admit a valid update", func() {
+			obj.Spec.RunAsNonRoot = true
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should admit deletion", func() {
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })

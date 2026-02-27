@@ -21,7 +21,6 @@ import (
 	. "github.com/onsi/gomega"
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
-	// TODO (user): Add any additional imports if needed
 )
 
 var _ = Describe("TelemetryProfile Webhook", func() {
@@ -36,51 +35,64 @@ var _ = Describe("TelemetryProfile Webhook", func() {
 		obj = &corev1alpha1.TelemetryProfile{}
 		oldObj = &corev1alpha1.TelemetryProfile{}
 		validator = TelemetryProfileCustomValidator{}
-		Expect(validator).NotTo(BeNil(), "Expected validator to be initialized")
+		Expect(validator).NotTo(BeNil())
 		defaulter = TelemetryProfileCustomDefaulter{}
-		Expect(defaulter).NotTo(BeNil(), "Expected defaulter to be initialized")
-		Expect(oldObj).NotTo(BeNil(), "Expected oldObj to be initialized")
-		Expect(obj).NotTo(BeNil(), "Expected obj to be initialized")
-	})
-
-	AfterEach(func() {
-		// TODO (user): Add any teardown logic common to all tests
+		Expect(defaulter).NotTo(BeNil())
+		Expect(oldObj).NotTo(BeNil())
+		Expect(obj).NotTo(BeNil())
 	})
 
 	Context("When creating TelemetryProfile under Defaulting Webhook", func() {
-		// TODO (user): Add logic for defaulting webhooks
-		// Example:
-		// It("Should apply defaults when a required field is empty", func() {
-		//     By("simulating a scenario where defaults should be applied")
-		//     obj.SomeFieldWithDefault = ""
-		//     By("calling the Default method to apply defaults")
-		//     defaulter.Default(ctx, obj)
-		//     By("checking that the default values are set")
-		//     Expect(obj.SomeFieldWithDefault).To(Equal("default_value"))
-		// })
+		It("Should apply defaults without error", func() {
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+		})
 	})
 
 	Context("When creating or updating TelemetryProfile under Validating Webhook", func() {
-		// TODO (user): Add logic for validating webhooks
-		// Example:
-		// It("Should deny creation if a required field is missing", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = ""
-		//     Expect(validator.ValidateCreate(ctx, obj)).Error().To(HaveOccurred())
-		// })
-		//
-		// It("Should admit creation if all required fields are present", func() {
-		//     By("simulating an invalid creation scenario")
-		//     obj.SomeRequiredField = "valid_value"
-		//     Expect(validator.ValidateCreate(ctx, obj)).To(BeNil())
-		// })
-		//
-		// It("Should validate updates correctly", func() {
-		//     By("simulating a valid update scenario")
-		//     oldObj.SomeRequiredField = "updated_value"
-		//     obj.SomeRequiredField = "updated_value"
-		//     Expect(validator.ValidateUpdate(ctx, oldObj, obj)).To(BeNil())
-		// })
-	})
+		It("Should admit a valid TelemetryProfile with no fields set", func() {
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
 
+		It("Should admit a valid tracingEndpoint", func() {
+			obj.Spec.TracingEndpoint = "http://otel-collector:4318"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should deny creation with an invalid tracingEndpoint", func() {
+			obj.Spec.TracingEndpoint = "not-a-url"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Should admit a valid samplingRate", func() {
+			obj.Spec.SamplingRate = "0.5"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should deny creation with a samplingRate out of range", func() {
+			obj.Spec.SamplingRate = "1.5"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Should deny creation with a non-numeric samplingRate", func() {
+			obj.Spec.SamplingRate = "high"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Should admit a valid update", func() {
+			obj.Spec.SamplingRate = "1.0"
+			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should admit deletion", func() {
+			_, err := validator.ValidateDelete(ctx, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+	})
 })

@@ -36,7 +36,6 @@ func (m *PodMutator) InjectDecoder(d admission.Decoder) error {
 // Handle mutates an incoming Pod admission request by applying defaults from
 // WorkloadPolicy (labels, resource requests/limits) and injecting telemetry
 // environment variables from TelemetryProfile resources active in the namespace.
-// nolint:gocyclo
 func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admission.Response {
 	if m.decoder == nil {
 		return admission.Errored(http.StatusInternalServerError, fmt.Errorf("admission decoder is not initialized"))
@@ -55,9 +54,7 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	sort.Slice(policies.Items, func(i, j int) bool {
-		return policies.Items[i].Spec.Priority > policies.Items[j].Spec.Priority
-	})
+	sortWorkloadPoliciesByPriority(policies.Items)
 
 	mutated := false
 
@@ -67,107 +64,25 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	sort.Slice(telemetryProfiles.Items, func(i, j int) bool {
-		return telemetryProfiles.Items[i].Spec.Priority > telemetryProfiles.Items[j].Spec.Priority
-	})
+	sortTelemetryProfilesByPriority(telemetryProfiles.Items)
 
-	for _, profile := range telemetryProfiles.Items {
-		if profile.Spec.InjectEnvVars && profile.Spec.TracingEndpoint != "" {
-			profileMutated := false
-			for i := range pod.Spec.Containers {
-				// Inject OTEL_EXPORTER_OTLP_ENDPOINT
-				hasEndpoint := false
-				for _, env := range pod.Spec.Containers[i].Env {
-					if env.Name == "OTEL_EXPORTER_OTLP_ENDPOINT" {
-						hasEndpoint = true
-						break
-					}
-				}
-				if !hasEndpoint {
-					pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, corev1.EnvVar{
-						Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
-						Value: profile.Spec.TracingEndpoint,
-					})
-					mutated = true
-					profileMutated = true
-				}
-
-				// Inject OTEL_TRACES_SAMPLER_ARG if SamplingRate is set
-				if profile.Spec.SamplingRate != "" {
-					hasSamplerArg := false
-					for _, env := range pod.Spec.Containers[i].Env {
-						if env.Name == "OTEL_TRACES_SAMPLER_ARG" {
-							hasSamplerArg = true
-							break
-						}
-					}
-					if !hasSamplerArg {
-						pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, corev1.EnvVar{
-							Name:  "OTEL_TRACES_SAMPLER_ARG",
-							Value: profile.Spec.SamplingRate,
-						})
-						mutated = true
-						profileMutated = true
-					}
-				}
-			}
-			if profileMutated {
-				m.Recorder.Event(&profile, "Normal", "PodMutated", fmt.Sprintf("Injected telemetry config to Pod %s in namespace %s", pod.Name, pod.Namespace))
-			}
-		}
+	telemetryMutated := m.applyTelemetry(pod, telemetryProfiles.Items)
+	if telemetryMutated {
+		mutated = true
 	}
 
 	// Apply policies
 	for _, policy := range policies.Items {
-		policyMutated := false
-		// Enforce default labels
-		if pod.Labels == nil {
-			pod.Labels = make(map[string]string)
-		}
-		for lbl, defaultVal := range policy.Spec.MandatoryLabels {
-			if _, exists := pod.Labels[lbl]; !exists {
-				pod.Labels[lbl] = defaultVal
-				mutated = true
-				policyMutated = true
-			}
-		}
+		policyMutated := m.applyPolicyLabels(pod, &policy)
 
-		// Enforce default resources
-		for i := range pod.Spec.Containers {
-			if pod.Spec.Containers[i].Resources.Requests == nil {
-				pod.Spec.Containers[i].Resources.Requests = make(corev1.ResourceList)
-			}
-			for rName, rVal := range policy.Spec.DefaultRequests {
-				rn := corev1.ResourceName(rName)
-				if _, exists := pod.Spec.Containers[i].Resources.Requests[rn]; !exists {
-					qty, parseErr := resource.ParseQuantity(rVal)
-					if parseErr != nil {
-						return admission.Denied(fmt.Sprintf("WorkloadPolicy %s has invalid defaultRequests quantity for %s: %q", policy.Name, rName, rVal))
-					}
-					pod.Spec.Containers[i].Resources.Requests[rn] = qty
-					mutated = true
-					policyMutated = true
-				}
-			}
-
-			if pod.Spec.Containers[i].Resources.Limits == nil {
-				pod.Spec.Containers[i].Resources.Limits = make(corev1.ResourceList)
-			}
-			for rName, rVal := range policy.Spec.DefaultLimits {
-				rn := corev1.ResourceName(rName)
-				if _, exists := pod.Spec.Containers[i].Resources.Limits[rn]; !exists {
-					qty, parseErr := resource.ParseQuantity(rVal)
-					if parseErr != nil {
-						return admission.Denied(fmt.Sprintf("WorkloadPolicy %s has invalid defaultLimits quantity for %s: %q", policy.Name, rName, rVal))
-					}
-					pod.Spec.Containers[i].Resources.Limits[rn] = qty
-					mutated = true
-					policyMutated = true
-				}
-			}
+		resourcesMutated, err := m.applyPolicyResources(pod, &policy)
+		if err != nil {
+			return admission.Denied(err.Error())
 		}
+		policyMutated = policyMutated || resourcesMutated
 
 		if policyMutated {
+			mutated = true
 			m.Recorder.Event(&policy, "Normal", "PodMutated", fmt.Sprintf("Applied workload policy defaults to Pod %s in namespace %s", pod.Name, pod.Namespace))
 		}
 	}
@@ -182,6 +97,127 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	}
 
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
+}
+
+func sortWorkloadPoliciesByPriority(policies []platformv1alpha1.WorkloadPolicy) {
+	sort.Slice(policies, func(i, j int) bool {
+		return policies[i].Spec.Priority > policies[j].Spec.Priority
+	})
+}
+
+func sortTelemetryProfilesByPriority(profiles []platformv1alpha1.TelemetryProfile) {
+	sort.Slice(profiles, func(i, j int) bool {
+		return profiles[i].Spec.Priority > profiles[j].Spec.Priority
+	})
+}
+
+func (m *PodMutator) applyTelemetry(pod *corev1.Pod, profiles []platformv1alpha1.TelemetryProfile) bool {
+	mutated := false
+	for _, profile := range profiles {
+		if !profile.Spec.InjectEnvVars || profile.Spec.TracingEndpoint == "" {
+			continue
+		}
+
+		profileMutated := false
+		for i := range pod.Spec.Containers {
+			if !containerHasEnvVar(pod.Spec.Containers[i].Env, "OTEL_EXPORTER_OTLP_ENDPOINT") {
+				pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, corev1.EnvVar{
+					Name:  "OTEL_EXPORTER_OTLP_ENDPOINT",
+					Value: profile.Spec.TracingEndpoint,
+				})
+				profileMutated = true
+			}
+
+			if profile.Spec.SamplingRate != "" && !containerHasEnvVar(pod.Spec.Containers[i].Env, "OTEL_TRACES_SAMPLER_ARG") {
+				pod.Spec.Containers[i].Env = append(pod.Spec.Containers[i].Env, corev1.EnvVar{
+					Name:  "OTEL_TRACES_SAMPLER_ARG",
+					Value: profile.Spec.SamplingRate,
+				})
+				profileMutated = true
+			}
+		}
+
+		if profileMutated {
+			mutated = true
+			m.Recorder.Event(&profile, "Normal", "PodMutated", fmt.Sprintf("Injected telemetry config to Pod %s in namespace %s", pod.Name, pod.Namespace))
+		}
+	}
+	return mutated
+}
+
+func (m *PodMutator) applyPolicyLabels(pod *corev1.Pod, policy *platformv1alpha1.WorkloadPolicy) bool {
+	if pod.Labels == nil {
+		pod.Labels = make(map[string]string)
+	}
+
+	mutated := false
+	for lbl, defaultVal := range policy.Spec.MandatoryLabels {
+		if _, exists := pod.Labels[lbl]; !exists {
+			pod.Labels[lbl] = defaultVal
+			mutated = true
+		}
+	}
+
+	return mutated
+}
+
+func (m *PodMutator) applyPolicyResources(pod *corev1.Pod, policy *platformv1alpha1.WorkloadPolicy) (bool, error) {
+	mutated := false
+	for i := range pod.Spec.Containers {
+		if pod.Spec.Containers[i].Resources.Requests == nil {
+			pod.Spec.Containers[i].Resources.Requests = make(corev1.ResourceList)
+		}
+		for rName, rVal := range policy.Spec.DefaultRequests {
+			rn := corev1.ResourceName(rName)
+			if _, exists := pod.Spec.Containers[i].Resources.Requests[rn]; exists {
+				continue
+			}
+
+			qty, parseErr := resource.ParseQuantity(rVal)
+			if parseErr != nil {
+				return false, fmt.Errorf(
+					"WorkloadPolicy %s has invalid defaultRequests quantity for %s: %q",
+					policy.Name,
+					rName,
+					rVal,
+				)
+			}
+			pod.Spec.Containers[i].Resources.Requests[rn] = qty
+			mutated = true
+		}
+
+		if pod.Spec.Containers[i].Resources.Limits == nil {
+			pod.Spec.Containers[i].Resources.Limits = make(corev1.ResourceList)
+		}
+		for rName, rVal := range policy.Spec.DefaultLimits {
+			rn := corev1.ResourceName(rName)
+			if _, exists := pod.Spec.Containers[i].Resources.Limits[rn]; exists {
+				continue
+			}
+
+			qty, parseErr := resource.ParseQuantity(rVal)
+			if parseErr != nil {
+				return false, fmt.Errorf(
+					"WorkloadPolicy %s has invalid defaultLimits quantity for %s: %q",
+					policy.Name,
+					rName,
+					rVal,
+				)
+			}
+			pod.Spec.Containers[i].Resources.Limits[rn] = qty
+			mutated = true
+		}
+	}
+	return mutated, nil
+}
+
+func containerHasEnvVar(envs []corev1.EnvVar, key string) bool {
+	for _, env := range envs {
+		if env.Name == key {
+			return true
+		}
+	}
+	return false
 }
 
 // SetupPodMutatorWebhookWithManager registers the Pod mutating webhook with the Manager.

@@ -19,8 +19,6 @@ package controller
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -55,20 +53,21 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 
 	log.Info("Reconciling WorkloadPolicy", "name", policy.Name, "namespace", policy.Namespace)
 
-	// Update status to Available
-	meta.SetStatusCondition(&policy.Status.Conditions, metav1.Condition{
-		Type:    "Available",
-		Status:  metav1.ConditionTrue,
-		Reason:  "Reconciled",
-		Message: "WorkloadPolicy is available and being enforced",
-	})
-
-	if err := r.Status().Update(ctx, &policy); err != nil {
+	updated, err := updateAvailableStatusIfChanged(
+		ctx,
+		r.Status(),
+		r.Recorder,
+		&policy,
+		&policy.Status.Conditions,
+		"WorkloadPolicy is available and being enforced",
+	)
+	if err != nil {
 		log.Error(err, "Failed to update WorkloadPolicy status")
 		return ctrl.Result{}, err
 	}
-
-	r.Recorder.Event(&policy, "Normal", "Reconciled", "WorkloadPolicy is available and being enforced")
+	if !updated {
+		log.V(1).Info("Skipping status update; WorkloadPolicy already marked Available", "name", policy.Name, "namespace", policy.Namespace)
+	}
 
 	return ctrl.Result{}, nil
 }

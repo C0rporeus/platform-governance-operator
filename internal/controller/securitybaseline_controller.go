@@ -19,8 +19,6 @@ package controller
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -54,20 +52,21 @@ func (r *SecurityBaselineReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	log.Info("Reconciling SecurityBaseline", "name", baseline.Name, "namespace", baseline.Namespace)
 
-	// Update status to Available
-	meta.SetStatusCondition(&baseline.Status.Conditions, metav1.Condition{
-		Type:    "Available",
-		Status:  metav1.ConditionTrue,
-		Reason:  "Reconciled",
-		Message: "SecurityBaseline is available and being enforced",
-	})
-
-	if err := r.Status().Update(ctx, &baseline); err != nil {
+	updated, err := updateAvailableStatusIfChanged(
+		ctx,
+		r.Status(),
+		r.Recorder,
+		&baseline,
+		&baseline.Status.Conditions,
+		"SecurityBaseline is available and being enforced",
+	)
+	if err != nil {
 		log.Error(err, "Failed to update SecurityBaseline status")
 		return ctrl.Result{}, err
 	}
-
-	r.Recorder.Event(&baseline, "Normal", "Reconciled", "SecurityBaseline is available and being enforced")
+	if !updated {
+		log.V(1).Info("Skipping status update; SecurityBaseline already marked Available", "name", baseline.Name, "namespace", baseline.Namespace)
+	}
 
 	return ctrl.Result{}, nil
 }

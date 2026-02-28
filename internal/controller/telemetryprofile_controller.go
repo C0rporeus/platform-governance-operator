@@ -19,8 +19,6 @@ package controller
 import (
 	"context"
 
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -54,20 +52,21 @@ func (r *TelemetryProfileReconciler) Reconcile(ctx context.Context, req ctrl.Req
 
 	log.Info("Reconciling TelemetryProfile", "name", profile.Name, "namespace", profile.Namespace)
 
-	// Update status to Available
-	meta.SetStatusCondition(&profile.Status.Conditions, metav1.Condition{
-		Type:    "Available",
-		Status:  metav1.ConditionTrue,
-		Reason:  "Reconciled",
-		Message: "TelemetryProfile is available and being applied",
-	})
-
-	if err := r.Status().Update(ctx, &profile); err != nil {
+	updated, err := updateAvailableStatusIfChanged(
+		ctx,
+		r.Status(),
+		r.Recorder,
+		&profile,
+		&profile.Status.Conditions,
+		"TelemetryProfile is available and being applied",
+	)
+	if err != nil {
 		log.Error(err, "Failed to update TelemetryProfile status")
 		return ctrl.Result{}, err
 	}
-
-	r.Recorder.Event(&profile, "Normal", "Reconciled", "TelemetryProfile is available and being applied")
+	if !updated {
+		log.V(1).Info("Skipping status update; TelemetryProfile already marked Available", "name", profile.Name, "namespace", profile.Namespace)
+	}
 
 	return ctrl.Result{}, nil
 }

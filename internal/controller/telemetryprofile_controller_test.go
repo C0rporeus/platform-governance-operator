@@ -22,7 +22,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -83,9 +82,18 @@ var _ = Describe("TelemetryProfile Controller", func() {
 
 			reconciled := &corev1alpha1.TelemetryProfile{}
 			Expect(k8sClient.Get(ctx, typeNamespacedName, reconciled)).To(Succeed())
-			availableCondition := meta.FindStatusCondition(reconciled.Status.Conditions, "Available")
-			Expect(availableCondition).NotTo(BeNil())
-			Expect(availableCondition.Status).To(Equal(metav1.ConditionTrue))
+			expectAvailableCondition(reconciled.Status.Conditions)
+			resourceVersionAfterFirstReconcile := reconciled.ResourceVersion
+
+			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
+				NamespacedName: typeNamespacedName,
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			reconciledAfterSecondRun := &corev1alpha1.TelemetryProfile{}
+			Expect(k8sClient.Get(ctx, typeNamespacedName, reconciledAfterSecondRun)).To(Succeed())
+			Expect(reconciledAfterSecondRun.ResourceVersion).To(Equal(resourceVersionAfterFirstReconcile))
+			expectAvailableCondition(reconciledAfterSecondRun.Status.Conditions)
 		})
 	})
 })

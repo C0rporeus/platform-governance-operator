@@ -66,6 +66,12 @@ var _ = Describe("TelemetryProfile Webhook", func() {
 			Expect(err).To(HaveOccurred())
 		})
 
+		It("Should deny creation with a non-HTTP scheme in tracingEndpoint", func() {
+			obj.Spec.TracingEndpoint = "ftp://evil.com/exfil"
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
+
 		It("Should admit a valid samplingRate", func() {
 			obj.Spec.SamplingRate = "0.5"
 			_, err := validator.ValidateCreate(ctx, obj)

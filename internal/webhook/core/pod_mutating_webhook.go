@@ -77,7 +77,9 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 
 		resourcesMutated, err := m.applyPolicyResources(pod, &policy)
 		if err != nil {
-			return admission.Denied(err.Error())
+			podlog.Error(err, "Skipping resource defaults from WorkloadPolicy due to invalid configuration",
+				"policy", policy.Name, "namespace", policy.Namespace)
+			continue
 		}
 		policyMutated = policyMutated || resourcesMutated
 

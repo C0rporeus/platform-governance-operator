@@ -83,8 +83,12 @@ func (v *TelemetryProfileCustomValidator) ValidateDelete(_ context.Context, obj 
 
 func validateTelemetryProfileSpec(obj *corev1alpha1.TelemetryProfile) error {
 	if obj.Spec.TracingEndpoint != "" {
-		if _, err := url.ParseRequestURI(obj.Spec.TracingEndpoint); err != nil {
+		parsed, err := url.ParseRequestURI(obj.Spec.TracingEndpoint)
+		if err != nil {
 			return fmt.Errorf("invalid tracingEndpoint: %q", obj.Spec.TracingEndpoint)
+		}
+		if parsed.Scheme != "http" && parsed.Scheme != "https" {
+			return fmt.Errorf("tracingEndpoint must use http or https scheme, got: %q", parsed.Scheme)
 		}
 	}
 

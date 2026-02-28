@@ -65,6 +65,168 @@ func TestPodValidatorAllowsExcludedNamespace(t *testing.T) {
 	}
 }
 
+func TestPodValidatorDeniesReadWriteRootFilesystem(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	baseline := &platformv1alpha1.SecurityBaseline{
+		ObjectMeta: metav1.ObjectMeta{Name: "baseline", Namespace: "team-a"},
+		Spec: platformv1alpha1.SecurityBaselineSpec{
+			ReadOnlyRootFilesystem: true,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseline).Build()
+	validator := &PodValidator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if resp.Allowed {
+		t.Fatalf("expected pod to be denied: container without readOnlyRootFilesystem")
+	}
+}
+
+func TestPodValidatorDeniesInitContainerWithoutReadOnly(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	readOnly := true
+	baseline := &platformv1alpha1.SecurityBaseline{
+		ObjectMeta: metav1.ObjectMeta{Name: "baseline", Namespace: "team-a"},
+		Spec: platformv1alpha1.SecurityBaselineSpec{
+			ReadOnlyRootFilesystem: true,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseline).Build()
+	validator := &PodValidator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{
+					Name:            "app",
+					SecurityContext: &corev1.SecurityContext{ReadOnlyRootFilesystem: &readOnly},
+				},
+			},
+			InitContainers: []corev1.Container{
+				{Name: "init"},
+			},
+		},
+	}
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if resp.Allowed {
+		t.Fatalf("expected pod to be denied: init container without readOnlyRootFilesystem")
+	}
+}
+
+func TestPodValidatorAllowsCompliantPod(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	runAsNonRoot := true
+	readOnly := true
+	baseline := &platformv1alpha1.SecurityBaseline{
+		ObjectMeta: metav1.ObjectMeta{Name: "baseline", Namespace: "team-a"},
+		Spec: platformv1alpha1.SecurityBaselineSpec{
+			RunAsNonRoot:           true,
+			ReadOnlyRootFilesystem: true,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseline).Build()
+	validator := &PodValidator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &runAsNonRoot},
+			Containers: []corev1.Container{
+				{
+					Name:            "app",
+					SecurityContext: &corev1.SecurityContext{ReadOnlyRootFilesystem: &readOnly},
+				},
+			},
+		},
+	}
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if !resp.Allowed {
+		t.Fatalf("expected compliant pod to be allowed, got denied: %s", resp.Result.Message)
+	}
+}
+
+func TestPodValidatorMultipleBaselines(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	runAsNonRoot := true
+	// First baseline only requires runAsNonRoot, second requires readOnly
+	baseline1 := &platformv1alpha1.SecurityBaseline{
+		ObjectMeta: metav1.ObjectMeta{Name: "baseline-1", Namespace: "team-a"},
+		Spec: platformv1alpha1.SecurityBaselineSpec{
+			RunAsNonRoot: true,
+		},
+	}
+	baseline2 := &platformv1alpha1.SecurityBaseline{
+		ObjectMeta: metav1.ObjectMeta{Name: "baseline-2", Namespace: "team-a"},
+		Spec: platformv1alpha1.SecurityBaselineSpec{
+			ReadOnlyRootFilesystem: true,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseline1, baseline2).Build()
+	validator := &PodValidator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	// Pod has runAsNonRoot but no readOnly -> should be denied by baseline-2
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: &runAsNonRoot},
+			Containers:      []corev1.Container{{Name: "app"}},
+		},
+	}
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if resp.Allowed {
+		t.Fatalf("expected pod to be denied by second baseline (readOnlyRootFilesystem)")
+	}
+}
+
+func TestPodValidatorAllowsWhenNoBaselinesExist(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	cl := fake.NewClientBuilder().WithScheme(scheme).Build()
+	validator := &PodValidator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if !resp.Allowed {
+		t.Fatalf("expected pod to be allowed when no baselines exist")
+	}
+}
+
 func newWebhookTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 

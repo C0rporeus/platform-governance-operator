@@ -10,7 +10,7 @@ In enterprise Kubernetes environments, leaving security and resource configurati
 
 This operator acts as an **automated platform contract**:
 1. **Secure by Default**: Actively rejects workloads that attempt to run as `root` or without a read-only filesystem.
-2. **Resilience & Cost Control**: Automatically injects resource `requests` and `limits` if the developer omits them, ensuring a rogue pod doesn't bring down an entire node.
+2. **Resilience & Cost Control**: Automatically injects resource `requests` and `limits` if the developer omits them, and can apply default Horizontal Pod Autoscaler (HPA) settings for Deployments.
 3. **Guaranteed Observability**: Injects OpenTelemetry environment variables and configurations directly into containers on-the-fly, ensuring all traffic generates traces without requiring developers to modify their Dockerfiles.
 4. **Organizational Governance**: Enforces mandatory labels (like `cost-center`) on all resources to enable financial chargeback.
 
@@ -22,7 +22,7 @@ The operator manages the platform contracts and intercepts API requests to enfor
 
 ### 1. The Contracts (CRDs)
 - **`SecurityBaseline`**: Defines and ensures minimum security standards (e.g., `runAsNonRoot`, `readOnlyRootFilesystem`).
-- **`WorkloadPolicy`**: Enforces resource limits (`requests`/`limits`) and mandatory organizational labels (e.g., `cost-center`, `owner`).
+- **`WorkloadPolicy`**: Enforces resource limits (`requests`/`limits`), mandatory organizational labels (e.g., `cost-center`, `owner`), and default HPA behavior for Deployments.
 - **`TelemetryProfile`**: Automates the injection of observability configurations (e.g., tracing agents or OpenTelemetry environment variables).
 
 ### 2. Interaction Flow
@@ -75,6 +75,11 @@ spec:
   defaultRequests:
     cpu: 100m
     memory: 128Mi
+  horizontalScaling:
+    enabledByDefault: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80
 
 ---
 # 2. Telemetry Profile
@@ -122,6 +127,13 @@ spec:
         value: "http://otel-collector.observability:4317"
 ```
 *(Furthermore, if the pod did not comply with the `SecurityBaseline`, it wouldn't even be created, returning a clear message to the developer in their terminal).*
+
+To explicitly opt-in/out HPA per Deployment, use:
+```yaml
+metadata:
+  annotations:
+    core.platform.f3nr1r.io/hpa-enabled: "true" # or "false"
+```
 
 ---
 

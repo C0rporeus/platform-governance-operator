@@ -46,6 +46,14 @@ var _ = Describe("WorkloadPolicy Webhook", func() {
 		It("Should apply defaults without error", func() {
 			Expect(defaulter.Default(ctx, obj)).To(Succeed())
 		})
+
+		It("Should default horizontal scaling values when configured", func() {
+			obj.Spec.HorizontalScaling = &corev1alpha1.HorizontalScalingPolicy{}
+			Expect(defaulter.Default(ctx, obj)).To(Succeed())
+			Expect(obj.Spec.HorizontalScaling.MinReplicas).To(Equal(int32(2)))
+			Expect(obj.Spec.HorizontalScaling.MaxReplicas).To(Equal(int32(10)))
+			Expect(obj.Spec.HorizontalScaling.TargetCPUUtilizationPercentage).To(Equal(int32(80)))
+		})
 	})
 
 	Context("When creating or updating WorkloadPolicy under Validating Webhook", func() {
@@ -81,6 +89,36 @@ var _ = Describe("WorkloadPolicy Webhook", func() {
 		It("Should admit a valid update", func() {
 			obj.Spec.DefaultRequests = map[string]string{"cpu": "100m"}
 			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("Should deny creation when horizontalScaling maxReplicas is lower than minReplicas", func() {
+			obj.Spec.HorizontalScaling = &corev1alpha1.HorizontalScalingPolicy{
+				MinReplicas: 5,
+				MaxReplicas: 2,
+			}
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Should deny creation when horizontalScaling target CPU is out of range", func() {
+			obj.Spec.HorizontalScaling = &corev1alpha1.HorizontalScalingPolicy{
+				MinReplicas:                    1,
+				MaxReplicas:                    3,
+				TargetCPUUtilizationPercentage: 101,
+			}
+			_, err := validator.ValidateCreate(ctx, obj)
+			Expect(err).To(HaveOccurred())
+		})
+
+		It("Should admit a valid horizontalScaling configuration", func() {
+			obj.Spec.HorizontalScaling = &corev1alpha1.HorizontalScalingPolicy{
+				EnabledByDefault:               true,
+				MinReplicas:                    2,
+				MaxReplicas:                    8,
+				TargetCPUUtilizationPercentage: 70,
+			}
+			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).NotTo(HaveOccurred())
 		})
 

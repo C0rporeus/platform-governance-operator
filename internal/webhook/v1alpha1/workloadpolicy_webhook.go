@@ -51,6 +51,19 @@ type WorkloadPolicyCustomDefaulter struct{}
 // Default implements webhook.CustomDefaulter so a webhook will be registered for the Kind WorkloadPolicy.
 func (d *WorkloadPolicyCustomDefaulter) Default(_ context.Context, obj *corev1alpha1.WorkloadPolicy) error {
 	workloadpolicylog.Info("Defaulting for WorkloadPolicy", "name", obj.GetName())
+	if obj.Spec.HorizontalScaling == nil {
+		return nil
+	}
+
+	if obj.Spec.HorizontalScaling.MinReplicas == 0 {
+		obj.Spec.HorizontalScaling.MinReplicas = corev1alpha1.DefaultHPAMinReplicas
+	}
+	if obj.Spec.HorizontalScaling.MaxReplicas == 0 {
+		obj.Spec.HorizontalScaling.MaxReplicas = corev1alpha1.DefaultHPAMaxReplicas
+	}
+	if obj.Spec.HorizontalScaling.TargetCPUUtilizationPercentage == 0 {
+		obj.Spec.HorizontalScaling.TargetCPUUtilizationPercentage = corev1alpha1.DefaultHPATargetCPU
+	}
 	return nil
 }
 
@@ -100,6 +113,21 @@ func validateWorkloadPolicySpec(obj *corev1alpha1.WorkloadPolicy) error {
 		}
 		if strings.TrimSpace(value) == "" {
 			return fmt.Errorf("mandatoryLabels value for key %q cannot be empty", key)
+		}
+	}
+
+	if obj.Spec.HorizontalScaling != nil {
+		if obj.Spec.HorizontalScaling.MinReplicas < 1 {
+			return fmt.Errorf("horizontalScaling.minReplicas must be >= 1")
+		}
+		if obj.Spec.HorizontalScaling.MaxReplicas < 1 {
+			return fmt.Errorf("horizontalScaling.maxReplicas must be >= 1")
+		}
+		if obj.Spec.HorizontalScaling.MaxReplicas < obj.Spec.HorizontalScaling.MinReplicas {
+			return fmt.Errorf("horizontalScaling.maxReplicas must be >= horizontalScaling.minReplicas")
+		}
+		if obj.Spec.HorizontalScaling.TargetCPUUtilizationPercentage < 1 || obj.Spec.HorizontalScaling.TargetCPUUtilizationPercentage > 100 {
+			return fmt.Errorf("horizontalScaling.targetCPUUtilizationPercentage must be between 1 and 100")
 		}
 	}
 

@@ -39,6 +39,49 @@ type WorkloadPolicySpec struct {
 	// +kubebuilder:default=0
 	// +optional
 	Priority int32 `json:"priority,omitempty"`
+
+	// HorizontalScaling defines default Horizontal Pod Autoscaler (HPA) behavior
+	// for Deployment workloads governed by this policy.
+	// +optional
+	HorizontalScaling *HorizontalScalingPolicy `json:"horizontalScaling,omitempty"`
+}
+
+const (
+	// DefaultHPAMinReplicas is the default minimum replicas for generated HPAs.
+	DefaultHPAMinReplicas int32 = 2
+	// DefaultHPAMaxReplicas is the default maximum replicas for generated HPAs.
+	DefaultHPAMaxReplicas int32 = 10
+	// DefaultHPATargetCPU is the default CPU utilization target for generated HPAs.
+	DefaultHPATargetCPU int32 = 80
+)
+
+// HorizontalScalingPolicy defines default HPA behavior for workloads.
+type HorizontalScalingPolicy struct {
+	// EnabledByDefault indicates whether HPA should be created for workloads
+	// unless explicitly overridden by annotation.
+	// +kubebuilder:default=false
+	// +optional
+	EnabledByDefault bool `json:"enabledByDefault,omitempty"`
+
+	// MinReplicas is the default minimum number of replicas for generated HPAs.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=2
+	// +optional
+	MinReplicas int32 `json:"minReplicas,omitempty"`
+
+	// MaxReplicas is the default maximum number of replicas for generated HPAs.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:default=10
+	// +optional
+	MaxReplicas int32 `json:"maxReplicas,omitempty"`
+
+	// TargetCPUUtilizationPercentage is the default CPU utilization target for
+	// generated HPAs.
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=100
+	// +kubebuilder:default=80
+	// +optional
+	TargetCPUUtilizationPercentage int32 `json:"targetCPUUtilizationPercentage,omitempty"`
 }
 
 // WorkloadPolicyStatus defines the observed state of WorkloadPolicy.

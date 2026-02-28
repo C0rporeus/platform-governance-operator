@@ -51,6 +51,41 @@ spec:
                 description: DefaultRequests defines the default resource requests
                   applied to containers
                 type: object
+              horizontalScaling:
+                description: |-
+                  HorizontalScaling defines default Horizontal Pod Autoscaler (HPA) behavior
+                  for Deployment workloads governed by this policy.
+                properties:
+                  enabledByDefault:
+                    default: false
+                    description: |-
+                      EnabledByDefault indicates whether HPA should be created for workloads
+                      unless explicitly overridden by annotation.
+                    type: boolean
+                  maxReplicas:
+                    default: 10
+                    description: MaxReplicas is the default maximum number of replicas
+                      for generated HPAs.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  minReplicas:
+                    default: 2
+                    description: MinReplicas is the default minimum number of replicas
+                      for generated HPAs.
+                    format: int32
+                    minimum: 1
+                    type: integer
+                  targetCPUUtilizationPercentage:
+                    default: 80
+                    description: |-
+                      TargetCPUUtilizationPercentage is the default CPU utilization target for
+                      generated HPAs.
+                    format: int32
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                type: object
               mandatoryLabels:
                 additionalProperties:
                   type: string

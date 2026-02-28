@@ -16,3 +16,8 @@ spec:
   mandatoryLabels:
     app.kubernetes.io/name: "sample-app"
     app.kubernetes.io/team: "platform"
+  horizontalScaling:
+    enabledByDefault: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 80

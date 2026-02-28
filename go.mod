@@ -1,6 +1,6 @@
 module github.com/f3nr1r/platform-governance-operator
 
-go 1.25.3
+go 1.25.0
 
 require (
 	github.com/onsi/ginkgo/v2 v2.27.2

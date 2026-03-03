@@ -14,7 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package controller
+// Package integration contains envtest-based integration tests that verify
+// cross-resource behaviour (e.g. WorkloadPolicy reconciler → Deployment → HPA).
+// These tests run as part of 'make test' and do NOT require a Kind cluster.
+package integration
 
 import (
 	"context"
@@ -24,7 +27,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,11 +36,7 @@ import (
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
 	"github.com/f3nr1r/platform-governance-operator/test/utils"
-	// +kubebuilder:scaffold:imports
 )
-
-// These tests use Ginkgo (BDD-style Go testing framework). Refer to
-// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 
 var (
 	ctx       context.Context
@@ -48,10 +46,9 @@ var (
 	k8sClient client.Client
 )
 
-func TestControllers(t *testing.T) {
+func TestIntegration(t *testing.T) {
 	RegisterFailHandler(Fail)
-
-	RunSpecs(t, "Controller Suite")
+	RunSpecs(t, "Integration Suite")
 }
 
 var _ = BeforeSuite(func() {
@@ -63,21 +60,17 @@ var _ = BeforeSuite(func() {
 	err = corev1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
-	// +kubebuilder:scaffold:scheme
-
-	By("bootstrapping test environment")
+	By("bootstrapping integration test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "crd", "bases")},
 		ErrorIfCRDPathMissing: true,
 	}
 
-	// Retrieve the first found binary directory to allow running tests from IDEs
-	binaryAssetsDir := utils.GetFirstFoundEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s"))
-	if binaryAssetsDir != "" {
-		testEnv.BinaryAssetsDirectory = binaryAssetsDir
+	// Allow running from IDEs without KUBEBUILDER_ASSETS set
+	if dir := utils.GetFirstFoundEnvTestBinaryDir(filepath.Join("..", "..", "bin", "k8s")); dir != "" {
+		testEnv.BinaryAssetsDirectory = dir
 	}
 
-	// cfg is defined in this file globally.
 	cfg, err = testEnv.Start()
 	Expect(err).NotTo(HaveOccurred())
 	Expect(cfg).NotTo(BeNil())
@@ -88,7 +81,7 @@ var _ = BeforeSuite(func() {
 })
 
 var _ = AfterSuite(func() {
-	By("tearing down the test environment")
+	By("tearing down the integration test environment")
 	cancel()
 	Eventually(func() error {
 		return testEnv.Stop()

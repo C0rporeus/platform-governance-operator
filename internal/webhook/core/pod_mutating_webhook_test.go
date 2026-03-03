@@ -365,6 +365,235 @@ func TestPodMutatorTelemetryDoesNotOverrideExistingEnvVars(t *testing.T) {
 	}
 }
 
+func TestPodMutatorEmptyContainersList(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	policy := &platformv1alpha1.WorkloadPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "team-a"},
+		Spec: platformv1alpha1.WorkloadPolicySpec{
+			MandatoryLabels: map[string]string{"env": "production"},
+			DefaultRequests: map[string]string{"cpu": "100m"},
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build()
+	mutator := &PodMutator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	// Pod with zero containers: label injection still happens, resource injection is a no-op
+	pod := &corev1.Pod{}
+	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if !resp.Allowed {
+		t.Fatalf("expected pod with no containers to be allowed")
+	}
+	// Labels were injected → expect patches
+	if len(resp.Patches) == 0 {
+		t.Fatalf("expected label patches even when containers list is empty")
+	}
+}
+
+func TestPodMutatorApplyTelemetrySkipsInitContainers(t *testing.T) {
+	t.Parallel()
+
+	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "app"},
+			},
+			InitContainers: []corev1.Container{
+				{Name: "init"},
+			},
+		},
+	}
+	profiles := []platformv1alpha1.TelemetryProfile{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "profile"},
+			Spec: platformv1alpha1.TelemetryProfileSpec{
+				InjectEnvVars:   true,
+				TracingEndpoint: "http://otel:4317",
+				SamplingRate:    "0.5",
+			},
+		},
+	}
+
+	mutated := mutator.applyTelemetry(pod, profiles)
+	if !mutated {
+		t.Fatalf("expected pod to be mutated (regular container got env vars)")
+	}
+
+	// Regular container must have the env var
+	if !containerHasEnvVar(pod.Spec.Containers[0].Env, "OTEL_EXPORTER_OTLP_ENDPOINT") {
+		t.Fatalf("expected regular container to receive OTEL_EXPORTER_OTLP_ENDPOINT")
+	}
+
+	// Init container must NOT have the env var (applyTelemetry only iterates Containers, not InitContainers)
+	if containerHasEnvVar(pod.Spec.InitContainers[0].Env, "OTEL_EXPORTER_OTLP_ENDPOINT") {
+		t.Fatalf("expected init container to be skipped by telemetry injection")
+	}
+}
+
+func TestPodMutatorApplyOnlyDefaultLimits(t *testing.T) {
+	t.Parallel()
+
+	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	// Policy has only DefaultLimits, no DefaultRequests
+	policy := &platformv1alpha1.WorkloadPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "limits-only"},
+		Spec: platformv1alpha1.WorkloadPolicySpec{
+			DefaultLimits: map[string]string{"cpu": "500m", "memory": "256Mi"},
+		},
+	}
+
+	mutated, err := mutator.applyPolicyResources(pod, policy)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !mutated {
+		t.Fatalf("expected limits to be applied")
+	}
+
+	cpuLimit := pod.Spec.Containers[0].Resources.Limits[corev1.ResourceCPU]
+	if cpuLimit.Cmp(resource.MustParse("500m")) != 0 {
+		t.Fatalf("expected cpu limit 500m, got %s", cpuLimit.String())
+	}
+	// Requests should remain empty (no DefaultRequests in policy)
+	if len(pod.Spec.Containers[0].Resources.Requests) != 0 {
+		t.Fatalf("expected no requests injected when DefaultRequests is empty")
+	}
+}
+
+func TestPodMutatorApplyTelemetryInjectEnvVarsFalseSkips(t *testing.T) {
+	t.Parallel()
+
+	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	profiles := []platformv1alpha1.TelemetryProfile{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "disabled"},
+			Spec: platformv1alpha1.TelemetryProfileSpec{
+				InjectEnvVars:   false, // disabled
+				TracingEndpoint: "http://otel:4317",
+			},
+		},
+	}
+
+	mutated := mutator.applyTelemetry(pod, profiles)
+	if mutated {
+		t.Fatalf("expected no mutation when InjectEnvVars is false")
+	}
+	if containerHasEnvVar(pod.Spec.Containers[0].Env, "OTEL_EXPORTER_OTLP_ENDPOINT") {
+		t.Fatalf("expected no env var injected when InjectEnvVars is false")
+	}
+}
+
+func TestPodMutatorApplyTelemetryEmptyEndpointSkips(t *testing.T) {
+	t.Parallel()
+
+	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	profiles := []platformv1alpha1.TelemetryProfile{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "no-endpoint"},
+			Spec: platformv1alpha1.TelemetryProfileSpec{
+				InjectEnvVars:   true,
+				TracingEndpoint: "", // empty endpoint → skipped
+			},
+		},
+	}
+
+	mutated := mutator.applyTelemetry(pod, profiles)
+	if mutated {
+		t.Fatalf("expected no mutation when TracingEndpoint is empty")
+	}
+}
+
+func TestPodMutatorApplyTelemetrySamplingRateNotInjectedWhenEmpty(t *testing.T) {
+	t.Parallel()
+
+	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{{Name: "app"}},
+		},
+	}
+	profiles := []platformv1alpha1.TelemetryProfile{
+		{
+			ObjectMeta: metav1.ObjectMeta{Name: "no-sampling"},
+			Spec: platformv1alpha1.TelemetryProfileSpec{
+				InjectEnvVars:   true,
+				TracingEndpoint: "http://otel:4317",
+				SamplingRate:    "", // empty → OTEL_TRACES_SAMPLER_ARG must NOT be injected
+			},
+		},
+	}
+
+	mutated := mutator.applyTelemetry(pod, profiles)
+	if !mutated {
+		t.Fatalf("expected mutation (endpoint env var should be injected)")
+	}
+	if !containerHasEnvVar(pod.Spec.Containers[0].Env, "OTEL_EXPORTER_OTLP_ENDPOINT") {
+		t.Fatalf("expected OTEL_EXPORTER_OTLP_ENDPOINT to be injected")
+	}
+	if containerHasEnvVar(pod.Spec.Containers[0].Env, "OTEL_TRACES_SAMPLER_ARG") {
+		t.Fatalf("expected OTEL_TRACES_SAMPLER_ARG NOT to be injected when SamplingRate is empty")
+	}
+}
+
+func TestContainerHasEnvVar(t *testing.T) {
+	t.Parallel()
+
+	envs := []corev1.EnvVar{
+		{Name: "EXISTING_VAR", Value: "value"},
+	}
+
+	if !containerHasEnvVar(envs, "EXISTING_VAR") {
+		t.Fatalf("expected true for existing env var")
+	}
+	if containerHasEnvVar(envs, "MISSING_VAR") {
+		t.Fatalf("expected false for missing env var")
+	}
+	if containerHasEnvVar(nil, "ANY_VAR") {
+		t.Fatalf("expected false for nil env slice")
+	}
+	if containerHasEnvVar([]corev1.EnvVar{}, "ANY_VAR") {
+		t.Fatalf("expected false for empty env slice")
+	}
+}
+
+func TestSortTelemetryProfilesByPriority(t *testing.T) {
+	t.Parallel()
+
+	profiles := []platformv1alpha1.TelemetryProfile{
+		{ObjectMeta: metav1.ObjectMeta{Name: "low"}, Spec: platformv1alpha1.TelemetryProfileSpec{Priority: 1}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "high"}, Spec: platformv1alpha1.TelemetryProfileSpec{Priority: 10}},
+		{ObjectMeta: metav1.ObjectMeta{Name: "mid"}, Spec: platformv1alpha1.TelemetryProfileSpec{Priority: 5}},
+	}
+
+	sortTelemetryProfilesByPriority(profiles)
+
+	if profiles[0].Name != "high" || profiles[1].Name != "mid" || profiles[2].Name != "low" {
+		t.Fatalf("expected descending priority order, got %s, %s, %s",
+			profiles[0].Name, profiles[1].Name, profiles[2].Name)
+	}
+}
+
 func TestSortWorkloadPoliciesByPriority(t *testing.T) {
 	t.Parallel()
 

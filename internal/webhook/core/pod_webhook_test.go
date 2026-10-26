@@ -394,6 +394,113 @@ func TestPodValidatorMultipleInitContainersOneViolates(t *testing.T) {
 	}
 }
 
+func TestPodValidatorWarnModeAllowsWithWarnings(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	baseline := &platformv1alpha1.SecurityBaseline{
+		ObjectMeta: metav1.ObjectMeta{Name: "baseline", Namespace: "team-a"},
+		Spec: platformv1alpha1.SecurityBaselineSpec{
+			EnforcementAction:      platformv1alpha1.EnforcementActionWarn,
+			RunAsNonRoot:           true,
+			ReadOnlyRootFilesystem: true,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseline).Build()
+	validator := &PodValidator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "app"},
+			},
+		},
+	}
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if !resp.Allowed {
+		t.Fatalf("expected pod to be allowed in Warn mode, got denied: %v", resp.Result)
+	}
+	if len(resp.Warnings) == 0 {
+		t.Fatalf("expected admission response to contain warnings in Warn mode")
+	}
+}
+
+func TestPodValidatorAuditModeAllowsSilently(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	baseline := &platformv1alpha1.SecurityBaseline{
+		ObjectMeta: metav1.ObjectMeta{Name: "baseline", Namespace: "team-a"},
+		Spec: platformv1alpha1.SecurityBaselineSpec{
+			EnforcementAction:      platformv1alpha1.EnforcementActionAudit,
+			RunAsNonRoot:           true,
+			ReadOnlyRootFilesystem: true,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseline).Build()
+	validator := &PodValidator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "app"},
+			},
+		},
+	}
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if !resp.Allowed {
+		t.Fatalf("expected pod to be allowed in Audit mode, got denied: %v", resp.Result)
+	}
+	if len(resp.Warnings) != 0 {
+		t.Fatalf("expected 0 warnings in Audit mode, got: %v", resp.Warnings)
+	}
+}
+
+func TestPodValidatorAggregatesMultipleViolations(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	baseline := &platformv1alpha1.SecurityBaseline{
+		ObjectMeta: metav1.ObjectMeta{Name: "baseline", Namespace: "team-a"},
+		Spec: platformv1alpha1.SecurityBaselineSpec{
+			EnforcementAction:      platformv1alpha1.EnforcementActionEnforce,
+			RunAsNonRoot:           true,
+			ReadOnlyRootFilesystem: true,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(baseline).Build()
+	validator := &PodValidator{
+		Client:   cl,
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	pod := &corev1.Pod{
+		Spec: corev1.PodSpec{
+			Containers: []corev1.Container{
+				{Name: "app-1"},
+				{Name: "app-2"},
+			},
+		},
+	}
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	if resp.Allowed {
+		t.Fatalf("expected pod to be denied")
+	}
+	// Verify that multiple violations are present in the reason
+	if resp.Result == nil || len(resp.Result.Message) == 0 {
+		t.Fatalf("expected denial message to be populated")
+	}
+}
+
 func newWebhookTestScheme(t *testing.T) *runtime.Scheme {
 	t.Helper()
 

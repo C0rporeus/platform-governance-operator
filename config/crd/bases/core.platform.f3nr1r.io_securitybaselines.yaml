@@ -39,6 +39,36 @@ spec:
           spec:
             description: spec defines the desired state of SecurityBaseline
             properties:
+              allowedCapabilities:
+                description: AllowedCapabilities lists capabilities permitted in capabilities.add
+                  when requiring drop ALL.
+                items:
+                  description: Capability represent POSIX capabilities type
+                  type: string
+                type: array
+              disallowPrivilegeEscalation:
+                description: DisallowPrivilegeEscalation requires allowPrivilegeEscalation=false
+                  in every container.
+                type: boolean
+              disallowPrivileged:
+                description: DisallowPrivileged rejects containers that run in privileged
+                  mode.
+                type: boolean
+              enforcementAction:
+                allOf:
+                - enum:
+                  - Enforce
+                  - Warn
+                  - Audit
+                - enum:
+                  - Enforce
+                  - Warn
+                  - Audit
+                default: Enforce
+                description: |-
+                  EnforcementAction determines the behavior when a violation occurs.
+                  Can be Enforce, Warn, or Audit. Defaults to Enforce.
+                type: string
               excludedNamespaces:
                 description: ExcludedNamespaces list namespaces to bypass this baseline
                 items:
@@ -47,6 +77,14 @@ spec:
               readOnlyRootFilesystem:
                 default: true
                 description: Require a read-only root filesystem
+                type: boolean
+              requireDropAllCapabilities:
+                description: RequireDropAllCapabilities requires dropping ALL Linux
+                  capabilities.
+                type: boolean
+              requireSeccompProfile:
+                description: RequireSeccompProfile requires RuntimeDefault or Localhost
+                  seccomp at Pod or container level.
                 type: boolean
               runAsNonRoot:
                 default: true

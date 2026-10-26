@@ -404,8 +404,14 @@ make helm-status / helm-uninstall / helm-rollback
 
 If webhooks are added after initial chart generation: backup `values.yaml`, re-run `kubebuilder edit --plugins=helm/v2-alpha --force`, restore customisations.
 
-## Docs & ADRs
+## Docs, Architecture Governance & Agile Backlog (`../0.docs/`)
 
+- `../0.docs/README.md` — Governance hub, agile taxonomy (Epics, Features, Enablers, HUs, Tasks), and DoD rules
+- `../0.docs/principles/PRIN-001-principios-de-arquitectura-y-cumplimiento.md` — Kube-native principles, Go design patterns & ISO 9001/27001 compliance
+- `../0.docs/reviews/REV-001-initial-maturity-and-iso-gap-analysis.md` — ISO 9001, ISO 27001 & Service Mesh gap analysis
+- `../0.docs/plans/PLAN-001-production-maturity-and-mesh-alignment.md` — Master architecture & phased evolution plan
+- `../0.docs/backlog/BACKLOG.md` — Master Scrum backlog & status tracker (`EPIC-01` through `EPIC-04`)
+- `../0.docs/bitacora/README.md` — Session changelog & handoff notes
 - `docs/adrs/0002-webhook-failure-policy-fail.md` — Why webhooks use `failurePolicy: fail`
 - `docs/blog/01-designing-platform-contracts-with-crds.md` — Design philosophy
 

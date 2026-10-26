@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/record"
@@ -55,35 +56,47 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
+	var denialReasons []string
+	var warningMessages []string
+
 	for _, baseline := range baselines.Items {
 		if slices.Contains(baseline.Spec.ExcludedNamespaces, req.Namespace) {
 			continue
 		}
 
-		if baseline.Spec.RunAsNonRoot {
-			if pod.Spec.SecurityContext == nil || pod.Spec.SecurityContext.RunAsNonRoot == nil || !*pod.Spec.SecurityContext.RunAsNonRoot {
-				msg := "Pod violates SecurityBaseline: must run as non-root"
-				v.Recorder.Event(&baseline, "Warning", "PodDenied", fmt.Sprintf("Denied Pod %s in namespace %s: %s", pod.Name, pod.Namespace, msg))
-				return admission.Denied(msg)
-			}
+		action := baseline.Spec.EnforcementAction
+		if action == "" {
+			action = platformv1alpha1.EnforcementActionEnforce
 		}
 
-		if baseline.Spec.ReadOnlyRootFilesystem {
-			for _, c := range pod.Spec.Containers {
-				if c.SecurityContext == nil || c.SecurityContext.ReadOnlyRootFilesystem == nil || !*c.SecurityContext.ReadOnlyRootFilesystem {
-					msg := "Pod violates SecurityBaseline: all containers must have read-only root filesystem"
-					v.Recorder.Event(&baseline, "Warning", "PodDenied", fmt.Sprintf("Denied Pod %s in namespace %s: %s", pod.Name, pod.Namespace, msg))
-					return admission.Denied(msg)
-				}
-			}
-			for _, c := range pod.Spec.InitContainers {
-				if c.SecurityContext == nil || c.SecurityContext.ReadOnlyRootFilesystem == nil || !*c.SecurityContext.ReadOnlyRootFilesystem {
-					msg := "Pod violates SecurityBaseline: all init containers must have read-only root filesystem"
-					v.Recorder.Event(&baseline, "Warning", "PodDenied", fmt.Sprintf("Denied Pod %s in namespace %s: %s", pod.Name, pod.Namespace, msg))
-					return admission.Denied(msg)
-				}
+		violations := EvaluateSecurityBaseline(pod, &baseline)
+		if len(violations) == 0 {
+			continue
+		}
+
+		for _, violation := range violations {
+			detailMsg := fmt.Sprintf("[%s / %s] %s (policy: %s)", violation.Rule, violation.ControlISO, violation.Message, baseline.Name)
+
+			switch action {
+			case platformv1alpha1.EnforcementActionEnforce:
+				denialReasons = append(denialReasons, detailMsg)
+				v.Recorder.Event(&baseline, "Warning", "PodDenied", fmt.Sprintf("Denied Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
+			case platformv1alpha1.EnforcementActionWarn:
+				warningMessages = append(warningMessages, detailMsg)
+				v.Recorder.Event(&baseline, "Warning", "PolicyViolationWarn", fmt.Sprintf("Warning for Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
+			case platformv1alpha1.EnforcementActionAudit:
+				podlog.Info("Audit violation detected", "policy", baseline.Name, "pod", pod.Name, "namespace", pod.Namespace, "rule", violation.Rule, "iso", violation.ControlISO, "container", violation.Container)
+				v.Recorder.Event(&baseline, "Warning", "PolicyViolationAudit", fmt.Sprintf("Audit violation on Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
 			}
 		}
+	}
+
+	if len(denialReasons) > 0 {
+		return admission.Denied(fmt.Sprintf("Pod violates SecurityBaseline: %s", strings.Join(denialReasons, "; ")))
+	}
+
+	if len(warningMessages) > 0 {
+		return admission.Allowed("").WithWarnings(warningMessages...)
 	}
 
 	return admission.Allowed("")

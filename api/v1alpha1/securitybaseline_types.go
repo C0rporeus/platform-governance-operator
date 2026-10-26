@@ -17,11 +17,32 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+)
+
+// EnforcementAction defines how non-compliant workloads are handled.
+// +kubebuilder:validation:Enum=Enforce;Warn;Audit
+type EnforcementAction string
+
+const (
+	// EnforcementActionEnforce blocks non-compliant admission requests.
+	EnforcementActionEnforce EnforcementAction = "Enforce"
+	// EnforcementActionWarn allows admission but returns warning messages to the client.
+	EnforcementActionWarn EnforcementAction = "Warn"
+	// EnforcementActionAudit allows admission silently and records violations in events and status.
+	EnforcementActionAudit EnforcementAction = "Audit"
 )
 
 // SecurityBaselineSpec defines the desired state of SecurityBaseline
 type SecurityBaselineSpec struct {
+	// EnforcementAction determines the behavior when a violation occurs.
+	// Can be Enforce, Warn, or Audit. Defaults to Enforce.
+	// +kubebuilder:validation:Enum=Enforce;Warn;Audit
+	// +kubebuilder:default=Enforce
+	// +optional
+	EnforcementAction EnforcementAction `json:"enforcementAction,omitempty"`
+
 	// Require running as non-root
 	// +kubebuilder:default=true
 	RunAsNonRoot bool `json:"runAsNonRoot"`
@@ -29,6 +50,26 @@ type SecurityBaselineSpec struct {
 	// Require a read-only root filesystem
 	// +kubebuilder:default=true
 	ReadOnlyRootFilesystem bool `json:"readOnlyRootFilesystem"`
+
+	// DisallowPrivilegeEscalation requires allowPrivilegeEscalation=false in every container.
+	// +optional
+	DisallowPrivilegeEscalation *bool `json:"disallowPrivilegeEscalation,omitempty"`
+
+	// DisallowPrivileged rejects containers that run in privileged mode.
+	// +optional
+	DisallowPrivileged *bool `json:"disallowPrivileged,omitempty"`
+
+	// RequireDropAllCapabilities requires dropping ALL Linux capabilities.
+	// +optional
+	RequireDropAllCapabilities *bool `json:"requireDropAllCapabilities,omitempty"`
+
+	// AllowedCapabilities lists capabilities permitted in capabilities.add when requiring drop ALL.
+	// +optional
+	AllowedCapabilities []corev1.Capability `json:"allowedCapabilities,omitempty"`
+
+	// RequireSeccompProfile requires RuntimeDefault or Localhost seccomp at Pod or container level.
+	// +optional
+	RequireSeccompProfile *bool `json:"requireSeccompProfile,omitempty"`
 
 	// ExcludedNamespaces list namespaces to bypass this baseline
 	// +optional

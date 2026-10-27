@@ -2,7 +2,9 @@ package core
 
 import (
 	"fmt"
+	"regexp"
 	"slices"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 
@@ -221,6 +223,142 @@ func (r *SeccompProfileRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha
 	return out
 }
 
+// DisallowHostNamespacesRule rejects Pods that share host namespaces.
+type DisallowHostNamespacesRule struct{}
+
+func (r *DisallowHostNamespacesRule) Name() string       { return "DisallowHostNamespaces" }
+func (r *DisallowHostNamespacesRule) ISOControl() string { return "ISO/IEC 27001 A.8.18" }
+func (r *DisallowHostNamespacesRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
+	if !enabled(baseline.Spec.DisallowHostNamespaces) {
+		return nil
+	}
+	var out []SecurityViolation
+	for _, namespace := range []struct {
+		name  string
+		value bool
+	}{{"hostNetwork", pod.Spec.HostNetwork}, {"hostPID", pod.Spec.HostPID}, {"hostIPC", pod.Spec.HostIPC}} {
+		if namespace.value {
+			out = append(out, violation(r, "", fmt.Sprintf("Pod must not enable %s", namespace.name)))
+		}
+	}
+	return out
+}
+
+// DisallowHostPathRule rejects hostPath volumes.
+type DisallowHostPathRule struct{}
+
+func (r *DisallowHostPathRule) Name() string       { return "DisallowHostPath" }
+func (r *DisallowHostPathRule) ISOControl() string { return "ISO/IEC 27001 A.8.18" }
+func (r *DisallowHostPathRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
+	if !enabled(baseline.Spec.DisallowHostPathVolumes) {
+		return nil
+	}
+	var out []SecurityViolation
+	for _, volume := range pod.Spec.Volumes {
+		if volume.HostPath != nil {
+			out = append(out, violation(r, "", fmt.Sprintf("Pod volume '%s' must not use hostPath", volume.Name)))
+		}
+	}
+	return out
+}
+
+type imageReference struct {
+	Name     string
+	Registry string
+	Tag      string
+	Digest   string
+}
+
+var (
+	imageTagPattern    = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$`)
+	imageDigestPattern = regexp.MustCompile(`^[a-z0-9]+(?:[+._-][a-z0-9]+)*:[A-Za-z0-9=_-]+$`)
+	sha256Pattern      = regexp.MustCompile(`^sha256:[a-f0-9]{64}$`)
+)
+
+func parseImageReference(raw string) (imageReference, error) {
+	if raw == "" || raw != strings.TrimSpace(raw) || strings.ContainsAny(raw, " \t\n") {
+		return imageReference{}, fmt.Errorf("image reference is empty or contains whitespace")
+	}
+	if strings.Count(raw, "@") > 1 {
+		return imageReference{}, fmt.Errorf("image reference contains more than one digest separator")
+	}
+	nameAndTag, digest, hasDigest := strings.Cut(raw, "@")
+	if hasDigest && (!imageDigestPattern.MatchString(digest) || strings.HasPrefix(digest, "sha256:") && !sha256Pattern.MatchString(digest)) {
+		return imageReference{}, fmt.Errorf("image reference has an invalid digest")
+	}
+	if nameAndTag == "" || strings.ContainsAny(nameAndTag, "?#") {
+		return imageReference{}, fmt.Errorf("image reference has an invalid name")
+	}
+
+	lastSlash := strings.LastIndex(nameAndTag, "/")
+	lastColon := strings.LastIndex(nameAndTag, ":")
+	name, tag := nameAndTag, ""
+	if lastColon > lastSlash {
+		name, tag = nameAndTag[:lastColon], nameAndTag[lastColon+1:]
+		if !imageTagPattern.MatchString(tag) {
+			return imageReference{}, fmt.Errorf("image reference has an invalid tag")
+		}
+	}
+	if name == "" || name != strings.ToLower(name) || strings.HasPrefix(name, "/") || strings.HasSuffix(name, "/") || strings.Contains(name, "//") {
+		return imageReference{}, fmt.Errorf("image reference has an invalid name")
+	}
+	for _, char := range name {
+		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || strings.ContainsRune("._-/:", char)) {
+			return imageReference{}, fmt.Errorf("image reference has an invalid name")
+		}
+	}
+
+	first := strings.SplitN(name, "/", 2)[0]
+	registry := "docker.io"
+	if strings.Contains(first, ".") || strings.Contains(first, ":") || first == "localhost" {
+		registry = first
+	}
+	return imageReference{Name: name, Registry: registry, Tag: tag, Digest: digest}, nil
+}
+
+// SupplyChainRule checks image tags, immutable digests, and allowed registry prefixes.
+type SupplyChainRule struct{}
+
+func (r *SupplyChainRule) Name() string       { return "SupplyChain" }
+func (r *SupplyChainRule) ISOControl() string { return "ISO/IEC 27001 A.8.30" }
+func registryPrefixAllowed(name string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		prefix = strings.TrimSpace(prefix)
+		if prefix == "" || !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		if strings.HasSuffix(prefix, "/") || len(name) == len(prefix) || name[len(prefix)] == '/' {
+			return true
+		}
+	}
+	return false
+}
+func (r *SupplyChainRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
+	disallowLatest := enabled(baseline.Spec.DisallowLatestTag)
+	requireDigest := enabled(baseline.Spec.RequireImageDigest)
+	if !disallowLatest && !requireDigest && len(baseline.Spec.AllowedRegistries) == 0 {
+		return nil
+	}
+	var out []SecurityViolation
+	forEachContainer(pod, func(c *corev1.Container, kind string) {
+		ref, err := parseImageReference(c.Image)
+		if err != nil {
+			out = append(out, violation(r, c.Name, fmt.Sprintf("%s container '%s' has invalid image reference %q", kind, c.Name, c.Image)))
+			return
+		}
+		if disallowLatest && (ref.Tag == "latest" || ref.Tag == "" && ref.Digest == "") {
+			out = append(out, violation(r, c.Name, fmt.Sprintf("%s container '%s' image must use a non-latest tag or digest", kind, c.Name)))
+		}
+		if requireDigest && !sha256Pattern.MatchString(ref.Digest) {
+			out = append(out, violation(r, c.Name, fmt.Sprintf("%s container '%s' image must use an immutable sha256 digest", kind, c.Name)))
+		}
+		if len(baseline.Spec.AllowedRegistries) > 0 && !registryPrefixAllowed(ref.Name, baseline.Spec.AllowedRegistries) {
+			out = append(out, violation(r, c.Name, fmt.Sprintf("%s container '%s' image registry/repository is not in the allowed prefixes", kind, c.Name)))
+		}
+	})
+	return out
+}
+
 // DefaultRules returns the active rule evaluators for SecurityBaseline.
 func DefaultRules() []RuleEvaluator {
 	return []RuleEvaluator{
@@ -230,6 +368,9 @@ func DefaultRules() []RuleEvaluator {
 		&DisallowPrivilegedRule{},
 		&DropAllCapabilitiesRule{},
 		&SeccompProfileRule{},
+		&DisallowHostNamespacesRule{},
+		&DisallowHostPathRule{},
+		&SupplyChainRule{},
 	}
 }
 

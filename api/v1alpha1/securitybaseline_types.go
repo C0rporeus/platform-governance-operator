@@ -71,6 +71,26 @@ type SecurityBaselineSpec struct {
 	// +optional
 	RequireSeccompProfile *bool `json:"requireSeccompProfile,omitempty"`
 
+	// DisallowHostNamespaces rejects hostNetwork, hostPID, and hostIPC.
+	// +optional
+	DisallowHostNamespaces *bool `json:"disallowHostNamespaces,omitempty"`
+
+	// DisallowHostPathVolumes rejects volumes that mount host paths.
+	// +optional
+	DisallowHostPathVolumes *bool `json:"disallowHostPathVolumes,omitempty"`
+
+	// DisallowLatestTag rejects latest and untagged image references.
+	// +optional
+	DisallowLatestTag *bool `json:"disallowLatestTag,omitempty"`
+
+	// RequireImageDigest requires images to use an immutable sha256 digest.
+	// +optional
+	RequireImageDigest *bool `json:"requireImageDigest,omitempty"`
+
+	// AllowedRegistries restricts image references to these registry or repository prefixes.
+	// +optional
+	AllowedRegistries []string `json:"allowedRegistries,omitempty"`
+
 	// ExcludedNamespaces list namespaces to bypass this baseline
 	// +optional
 	ExcludedNamespaces []string `json:"excludedNamespaces,omitempty"`

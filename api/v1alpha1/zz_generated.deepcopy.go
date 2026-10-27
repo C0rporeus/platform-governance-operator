@@ -128,6 +128,31 @@ func (in *SecurityBaselineSpec) DeepCopyInto(out *SecurityBaselineSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.DisallowHostNamespaces != nil {
+		in, out := &in.DisallowHostNamespaces, &out.DisallowHostNamespaces
+		*out = new(bool)
+		**out = **in
+	}
+	if in.DisallowHostPathVolumes != nil {
+		in, out := &in.DisallowHostPathVolumes, &out.DisallowHostPathVolumes
+		*out = new(bool)
+		**out = **in
+	}
+	if in.DisallowLatestTag != nil {
+		in, out := &in.DisallowLatestTag, &out.DisallowLatestTag
+		*out = new(bool)
+		**out = **in
+	}
+	if in.RequireImageDigest != nil {
+		in, out := &in.RequireImageDigest, &out.RequireImageDigest
+		*out = new(bool)
+		**out = **in
+	}
+	if in.AllowedRegistries != nil {
+		in, out := &in.AllowedRegistries, &out.AllowedRegistries
+		*out = make([]string, len(*in))
+		copy(*out, *in)
+	}
 	if in.ExcludedNamespaces != nil {
 		in, out := &in.ExcludedNamespaces, &out.ExcludedNamespaces
 		*out = make([]string, len(*in))

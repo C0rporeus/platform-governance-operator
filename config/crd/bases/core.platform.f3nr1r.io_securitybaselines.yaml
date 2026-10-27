@@ -46,6 +46,23 @@ spec:
                   description: Capability represent POSIX capabilities type
                   type: string
                 type: array
+              allowedRegistries:
+                description: AllowedRegistries restricts image references to these
+                  registry or repository prefixes.
+                items:
+                  type: string
+                type: array
+              disallowHostNamespaces:
+                description: DisallowHostNamespaces rejects hostNetwork, hostPID,
+                  and hostIPC.
+                type: boolean
+              disallowHostPathVolumes:
+                description: DisallowHostPathVolumes rejects volumes that mount host
+                  paths.
+                type: boolean
+              disallowLatestTag:
+                description: DisallowLatestTag rejects latest and untagged image references.
+                type: boolean
               disallowPrivilegeEscalation:
                 description: DisallowPrivilegeEscalation requires allowPrivilegeEscalation=false
                   in every container.
@@ -81,6 +98,10 @@ spec:
               requireDropAllCapabilities:
                 description: RequireDropAllCapabilities requires dropping ALL Linux
                   capabilities.
+                type: boolean
+              requireImageDigest:
+                description: RequireImageDigest requires images to use an immutable
+                  sha256 digest.
                 type: boolean
               requireSeccompProfile:
                 description: RequireSeccompProfile requires RuntimeDefault or Localhost

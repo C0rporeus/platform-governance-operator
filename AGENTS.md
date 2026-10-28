@@ -10,7 +10,7 @@ A **Kubernetes Operator** that enforces platform governance through three Custom
 - **Group:** `core.platform.f3nr1r.io`
 - **API Version:** `v1alpha1`
 - **Module:** `github.com/f3nr1r/platform-governance-operator`
-- **Go:** 1.25.0 | **controller-runtime:** v0.23.1 | **k8s.io/api:** v0.35.0
+- **Go:** 1.25.0 minimum in `go.mod` (CI matrix: `1.25` + `stable`; local dev verified on 1.27.3) | **controller-runtime:** v0.23.1 | **k8s.io/api:** v0.35.0
 
 ## Repository Structure
 
@@ -20,6 +20,7 @@ api/v1alpha1/                       CRD type definitions (kubebuilder markers li
   securitybaseline_types.go
   workloadpolicy_types.go
   telemetryprofile_types.go
+  policy_target_types.go            PolicyTargetReference + PolicyTargeting (embedded in all 3 specs)
   zz_generated.deepcopy.go          AUTO-GENERATED — never edit
 internal/controller/                Reconciliation logic (one file per CRD)
   securitybaseline_controller.go
@@ -28,6 +29,9 @@ internal/controller/                Reconciliation logic (one file per CRD)
   reconcile_status_helper.go        Shared status condition helpers
   reconcile_status_helper_test.go   Unit tests for unexported status helper
   workloadpolicy_hpa_test.go        Unit tests for unexported HPA helpers
+internal/policy/                    Pure in-memory policy resolution (no API calls)
+  resolver.go                       Specificity ordering: targetRef > selector > namespace > cluster
+  index.go                          Field index `spec.policyScope` (registered in cmd/main.go)
 internal/webhook/
   v1alpha1/                         CRD defaulting/validating webhooks
   core/                             Core API (Pod) webhooks
@@ -87,6 +91,7 @@ go test ./internal/webhook/...   # Webhook handler tests only
 |---|---|---|---|
 | Unit (private) | `internal/controller/*_test.go` | `go test` + fake/real client | Unexported helpers: HPA builders, status helper |
 | Unit (webhooks) | `internal/webhook/*/` | `go test` + fake client | Pod validator & mutator handlers |
+| Unit (policy) | `internal/policy/` | `go test` + fake indexer | Specificity resolution, index keys |
 | Integration | `test/integration/` | Ginkgo + envtest | Reconcile() smoke + HPA lifecycle (public API only) |
 | E2E | `test/e2e/` | Ginkgo + Kind cluster | Full deployment (build tag `//go:build e2e`) |
 
@@ -95,7 +100,7 @@ go test ./internal/webhook/...   # Webhook handler tests only
 ### Linting
 
 ```bash
-make lint          # golangci-lint (19 linters)
+make lint          # golangci-lint v2.15.0 (19 linters; must report 0 issues)
 make lint-fix      # Auto-fix style issues
 make lint-config   # Verify linter config
 ```
@@ -263,6 +268,7 @@ var _ = Describe("FooController", func() {
 ```
 
 - `test/integration/suite_test.go` — global envtest setup, shared `k8sClient`, `ctx`
+- `test/integration/controller_helpers_test.go` — `controllerSmokeBody(spec)` shared Reconcile smoke test; a new CRD adds a ~20-line spec file instead of copying one
 - `internal/webhook/v1alpha1/webhook_suite_test.go` — webhook suite setup
 - CRDs loaded from `config/crd/bases/` by envtest (requires `make manifests` first)
 - Black-box tests import the controller package: `controller.WorkloadPolicyReconciler{...}`
@@ -288,6 +294,8 @@ var _ = Describe("FooController", func() {
 
 Custom `logcheck` enforces Kubernetes-style structured logging.
 
+`goconst` is excluded for `_test.go` (repeated fixture literals read better inline); it stays active for production code. golangci-lint must be a version whose `x/tools` can read the installed Go's export data — bump `GOLANGCI_LINT_VERSION` in `Makefile` and `.custom-gcl.yml` together when upgrading Go.
+
 ## Adding a New CRD
 
 1. `kubebuilder create api --group core --version v1alpha1 --kind Foo`
@@ -296,7 +304,7 @@ Custom `logcheck` enforces Kubernetes-style structured logging.
 4. Implement `Reconcile()` in `internal/controller/foo_controller.go`
 5. Add webhooks: `kubebuilder create webhook --group core --version v1alpha1 --kind Foo --defaulting --programmatic-validation`
 6. Register controller + webhook in `cmd/main.go`
-7. Add integration tests in `test/integration/foo_controller_test.go` (exported API) and, if needed, unit tests for unexported helpers in `internal/controller/foo_*_test.go`
+7. Add integration tests in `test/integration/foo_controller_test.go` (exported API; reuse `controllerSmokeBody` for the Reconcile smoke test) and, if needed, unit tests for unexported helpers in `internal/controller/foo_*_test.go`
 8. Add sample CR in `config/samples/`
 
 ## kubebuilder CLI Reference

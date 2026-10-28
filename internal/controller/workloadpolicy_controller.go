@@ -37,6 +37,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
+	policyresolver "github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
 const (
@@ -74,19 +75,9 @@ func (r *WorkloadPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Reque
 	log.Info("Reconciling WorkloadPolicy", "name", policy.Name, "namespace", policy.Namespace)
 
 	if policy.Spec.HorizontalScaling != nil {
-		highestPriorityPolicy, err := r.isHighestPriorityPolicy(ctx, &policy)
-		if err != nil {
-			log.Error(err, "Failed to evaluate WorkloadPolicy priority for horizontal scaling")
+		if err := r.reconcileDeploymentHPAs(ctx, &policy); err != nil {
+			log.Error(err, "Failed to reconcile horizontal scaling for Deployments")
 			return ctrl.Result{}, err
-		}
-
-		if highestPriorityPolicy {
-			if err := r.reconcileDeploymentHPAs(ctx, &policy); err != nil {
-				log.Error(err, "Failed to reconcile horizontal scaling for Deployments")
-				return ctrl.Result{}, err
-			}
-		} else {
-			log.V(1).Info("Skipping HPA reconciliation because policy is not highest priority", "name", policy.Name, "namespace", policy.Namespace)
 		}
 	}
 
@@ -137,44 +128,75 @@ func (r *WorkloadPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *WorkloadPolicyReconciler) isHighestPriorityPolicy(ctx context.Context, policy *corev1alpha1.WorkloadPolicy) (bool, error) {
+// horizontalScalingPolicies lists the policies in the namespace that define horizontal scaling.
+func (r *WorkloadPolicyReconciler) horizontalScalingPolicies(ctx context.Context, namespace string) ([]corev1alpha1.WorkloadPolicy, error) {
 	var policies corev1alpha1.WorkloadPolicyList
-	if err := r.List(ctx, &policies, client.InNamespace(policy.Namespace)); err != nil {
-		return false, err
+	if err := r.List(ctx, &policies, client.InNamespace(namespace)); err != nil {
+		return nil, err
 	}
 
-	var (
-		highest    corev1alpha1.WorkloadPolicy
-		highestSet bool
-	)
+	withScaling := make([]corev1alpha1.WorkloadPolicy, 0, len(policies.Items))
 	for i := range policies.Items {
-		candidate := policies.Items[i]
-		if candidate.Spec.HorizontalScaling == nil {
-			continue
-		}
-
-		if !highestSet {
-			highest = candidate
-			highestSet = true
-			continue
-		}
-
-		if candidate.Spec.Priority > highest.Spec.Priority {
-			highest = candidate
-			continue
-		}
-		if candidate.Spec.Priority == highest.Spec.Priority && candidate.Name < highest.Name {
-			highest = candidate
+		if policies.Items[i].Spec.HorizontalScaling != nil {
+			withScaling = append(withScaling, policies.Items[i])
 		}
 	}
-	if !highestSet {
-		return false, nil
-	}
+	return withScaling, nil
+}
 
-	return highest.Name == policy.Name, nil
+// governingPolicyName returns the name of the most specific (then highest
+// priority) horizontal scaling policy for the deployment, or "" if none applies.
+func governingPolicyName(
+	ctx context.Context,
+	candidates []corev1alpha1.WorkloadPolicy,
+	deployment *appsv1.Deployment,
+) string {
+	ordered, errs := policyresolver.Select(candidates, policyresolver.SubjectForDeployment(deployment), workloadPolicyCandidate)
+	for _, err := range errs {
+		logf.FromContext(ctx).Error(err, "Skipping WorkloadPolicy with invalid selector", "deployment", deployment.Name)
+	}
+	if len(ordered) == 0 {
+		return ""
+	}
+	return ordered[0].Name
+}
+
+// releaseUngovernedHPA deletes the managed HPA of a Deployment that no policy
+// governs any more, but only if this policy created it. HPAs owned by another
+// policy or not managed by the operator are left untouched.
+func (r *WorkloadPolicyReconciler) releaseUngovernedHPA(
+	ctx context.Context,
+	policy *corev1alpha1.WorkloadPolicy,
+	deployment *appsv1.Deployment,
+) error {
+	existing := &autoscalingv2.HorizontalPodAutoscaler{}
+	key := types.NamespacedName{Name: managedHPAName(deployment.Name), Namespace: deployment.Namespace}
+	if err := r.Get(ctx, key, existing); err != nil {
+		return client.IgnoreNotFound(err)
+	}
+	if !isManagedHPA(existing) || existing.Annotations[managedHPAWorkloadPolicyAnnotationKey] != policy.Name {
+		return nil
+	}
+	return client.IgnoreNotFound(r.Delete(ctx, existing))
+}
+
+func workloadPolicyCandidate(p corev1alpha1.WorkloadPolicy) policyresolver.Candidate {
+	return policyresolver.Candidate{
+		Name:      p.Name,
+		Namespace: p.Namespace,
+		Priority:  p.Spec.Priority,
+		Targeting: p.Spec.PolicyTargeting,
+	}
 }
 
 func (r *WorkloadPolicyReconciler) reconcileDeploymentHPAs(ctx context.Context, policy *corev1alpha1.WorkloadPolicy) error {
+	log := logf.FromContext(ctx)
+
+	candidates, err := r.horizontalScalingPolicies(ctx, policy.Namespace)
+	if err != nil {
+		return err
+	}
+
 	var deployments appsv1.DeploymentList
 	if err := r.List(ctx, &deployments, client.InNamespace(policy.Namespace)); err != nil {
 		return err
@@ -182,6 +204,20 @@ func (r *WorkloadPolicyReconciler) reconcileDeploymentHPAs(ctx context.Context, 
 
 	for i := range deployments.Items {
 		deployment := &deployments.Items[i]
+
+		switch governing := governingPolicyName(ctx, candidates, deployment); governing {
+		case policy.Name:
+			// This policy governs the Deployment: reconcile its HPA below.
+		case "":
+			if err := r.releaseUngovernedHPA(ctx, policy, deployment); err != nil {
+				return err
+			}
+			continue
+		default:
+			log.V(1).Info("Skipping Deployment governed by another WorkloadPolicy",
+				"policy", policy.Name, "governing", governing, "deployment", deployment.Name, "namespace", policy.Namespace)
+			continue
+		}
 
 		enabled, err := hpaEnabledForDeployment(deployment, policy.Spec.HorizontalScaling)
 		if err != nil {

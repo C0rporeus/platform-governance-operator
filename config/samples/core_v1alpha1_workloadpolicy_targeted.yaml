@@ -1,0 +1,32 @@
+# Targets a single Deployment. A targetRef policy outranks selector and
+# namespace-wide policies regardless of priority; omit both fields to apply
+# the policy to the whole namespace.
+apiVersion: core.platform.f3nr1r.io/v1alpha1
+kind: WorkloadPolicy
+metadata:
+  name: payments-api-scaling
+  namespace: payments
+spec:
+  targetRef:
+    group: apps
+    kind: Deployment
+    name: payments-api
+  horizontalScaling:
+    enabledByDefault: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+---
+# Selects workloads by pod labels instead of by name.
+apiVersion: core.platform.f3nr1r.io/v1alpha1
+kind: SecurityBaseline
+metadata:
+  name: data-tier-baseline
+  namespace: payments
+spec:
+  selector:
+    matchLabels:
+      tier: data
+  enforcementAction: Warn
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true

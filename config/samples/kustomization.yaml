@@ -3,4 +3,5 @@ resources:
 - core_v1alpha1_securitybaseline.yaml
 - core_v1alpha1_workloadpolicy.yaml
 - core_v1alpha1_telemetryprofile.yaml
+- core_v1alpha1_workloadpolicy_targeted.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

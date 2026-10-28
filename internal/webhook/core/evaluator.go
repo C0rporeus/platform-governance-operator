@@ -33,7 +33,12 @@ type RunAsNonRootRule struct{}
 func (r *RunAsNonRootRule) Name() string { return "RunAsNonRoot" }
 
 // ISOControl returns the ISO/IEC 27001 control reference.
-func (r *RunAsNonRootRule) ISOControl() string { return "ISO/IEC 27001 A.8.2" }
+const (
+	isoControlA82  = "ISO/IEC 27001 A.8.2"
+	isoControlA818 = "ISO/IEC 27001 A.8.18"
+)
+
+func (r *RunAsNonRootRule) ISOControl() string { return isoControlA82 }
 
 // Evaluate verifies that all containers run as non-root.
 func (r *RunAsNonRootRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
@@ -89,7 +94,7 @@ type ReadOnlyRootFilesystemRule struct{}
 func (r *ReadOnlyRootFilesystemRule) Name() string { return "ReadOnlyRootFilesystem" }
 
 // ISOControl returns the ISO/IEC 27001 control reference.
-func (r *ReadOnlyRootFilesystemRule) ISOControl() string { return "ISO/IEC 27001 A.8.18" }
+func (r *ReadOnlyRootFilesystemRule) ISOControl() string { return isoControlA818 }
 
 // Evaluate verifies that all containers have a read-only root filesystem.
 func (r *ReadOnlyRootFilesystemRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
@@ -144,7 +149,7 @@ func violation(rule RuleEvaluator, container, message string) SecurityViolation 
 type DisallowPrivilegeEscalationRule struct{}
 
 func (r *DisallowPrivilegeEscalationRule) Name() string       { return "DisallowPrivilegeEscalation" }
-func (r *DisallowPrivilegeEscalationRule) ISOControl() string { return "ISO/IEC 27001 A.8.2" }
+func (r *DisallowPrivilegeEscalationRule) ISOControl() string { return isoControlA82 }
 func (r *DisallowPrivilegeEscalationRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
 	if !enabled(baseline.Spec.DisallowPrivilegeEscalation) {
 		return nil
@@ -162,7 +167,7 @@ func (r *DisallowPrivilegeEscalationRule) Evaluate(pod *corev1.Pod, baseline *pl
 type DisallowPrivilegedRule struct{}
 
 func (r *DisallowPrivilegedRule) Name() string       { return "DisallowPrivileged" }
-func (r *DisallowPrivilegedRule) ISOControl() string { return "ISO/IEC 27001 A.8.2" }
+func (r *DisallowPrivilegedRule) ISOControl() string { return isoControlA82 }
 func (r *DisallowPrivilegedRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
 	if !enabled(baseline.Spec.DisallowPrivileged) {
 		return nil
@@ -180,7 +185,7 @@ func (r *DisallowPrivilegedRule) Evaluate(pod *corev1.Pod, baseline *platformv1a
 type DropAllCapabilitiesRule struct{}
 
 func (r *DropAllCapabilitiesRule) Name() string       { return "DropAllCapabilities" }
-func (r *DropAllCapabilitiesRule) ISOControl() string { return "ISO/IEC 27001 A.8.2" }
+func (r *DropAllCapabilitiesRule) ISOControl() string { return isoControlA82 }
 func (r *DropAllCapabilitiesRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
 	if !enabled(baseline.Spec.RequireDropAllCapabilities) {
 		return nil
@@ -204,7 +209,7 @@ func (r *DropAllCapabilitiesRule) Evaluate(pod *corev1.Pod, baseline *platformv1
 type SeccompProfileRule struct{}
 
 func (r *SeccompProfileRule) Name() string       { return "SeccompProfile" }
-func (r *SeccompProfileRule) ISOControl() string { return "ISO/IEC 27001 A.8.2" }
+func (r *SeccompProfileRule) ISOControl() string { return isoControlA82 }
 func validSeccomp(profile *corev1.SeccompProfile) bool {
 	return profile != nil && (profile.Type == corev1.SeccompProfileTypeRuntimeDefault || profile.Type == corev1.SeccompProfileTypeLocalhost)
 }
@@ -227,7 +232,7 @@ func (r *SeccompProfileRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha
 type DisallowHostNamespacesRule struct{}
 
 func (r *DisallowHostNamespacesRule) Name() string       { return "DisallowHostNamespaces" }
-func (r *DisallowHostNamespacesRule) ISOControl() string { return "ISO/IEC 27001 A.8.18" }
+func (r *DisallowHostNamespacesRule) ISOControl() string { return isoControlA818 }
 func (r *DisallowHostNamespacesRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
 	if !enabled(baseline.Spec.DisallowHostNamespaces) {
 		return nil
@@ -248,7 +253,7 @@ func (r *DisallowHostNamespacesRule) Evaluate(pod *corev1.Pod, baseline *platfor
 type DisallowHostPathRule struct{}
 
 func (r *DisallowHostPathRule) Name() string       { return "DisallowHostPath" }
-func (r *DisallowHostPathRule) ISOControl() string { return "ISO/IEC 27001 A.8.18" }
+func (r *DisallowHostPathRule) ISOControl() string { return isoControlA818 }
 func (r *DisallowHostPathRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
 	if !enabled(baseline.Spec.DisallowHostPathVolumes) {
 		return nil
@@ -303,12 +308,13 @@ func parseImageReference(raw string) (imageReference, error) {
 		return imageReference{}, fmt.Errorf("image reference has an invalid name")
 	}
 	for _, char := range name {
-		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || strings.ContainsRune("._-/:", char)) {
+		isAlnum := char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9'
+		if !isAlnum && !strings.ContainsRune("._-/:", char) {
 			return imageReference{}, fmt.Errorf("image reference has an invalid name")
 		}
 	}
 
-	first := strings.SplitN(name, "/", 2)[0]
+	first, _, _ := strings.Cut(name, "/")
 	registry := "docker.io"
 	if strings.Contains(first, ".") || strings.Contains(first, ":") || first == "localhost" {
 		registry = first

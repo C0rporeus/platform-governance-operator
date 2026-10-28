@@ -34,7 +34,7 @@ func TestPodValidatorDeniesRootPod(t *testing.T) {
 	}
 
 	pod := &corev1.Pod{}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if resp.Allowed {
 		t.Fatalf("expected pod admission to be denied")
 	}
@@ -59,7 +59,7 @@ func TestPodValidatorAllowsExcludedNamespace(t *testing.T) {
 	}
 
 	pod := &corev1.Pod{}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod admission to be allowed for excluded namespace")
 	}
@@ -87,7 +87,7 @@ func TestPodValidatorDeniesReadWriteRootFilesystem(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if resp.Allowed {
 		t.Fatalf("expected pod to be denied: container without readOnlyRootFilesystem")
 	}
@@ -124,7 +124,7 @@ func TestPodValidatorDeniesInitContainerWithoutReadOnly(t *testing.T) {
 			},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if resp.Allowed {
 		t.Fatalf("expected pod to be denied: init container without readOnlyRootFilesystem")
 	}
@@ -161,7 +161,7 @@ func TestPodValidatorAllowsCompliantPod(t *testing.T) {
 			},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected compliant pod to be allowed, got denied: %s", resp.Result.Message)
 	}
@@ -199,7 +199,7 @@ func TestPodValidatorMultipleBaselines(t *testing.T) {
 			Containers:      []corev1.Container{{Name: "app"}},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if resp.Allowed {
 		t.Fatalf("expected pod to be denied by second baseline (readOnlyRootFilesystem)")
 	}
@@ -221,7 +221,7 @@ func TestPodValidatorAllowsWhenNoBaselinesExist(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod to be allowed when no baselines exist")
 	}
@@ -251,7 +251,7 @@ func TestPodValidatorNilPodSecurityContextDenied(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if resp.Allowed {
 		t.Fatalf("expected pod to be denied: nil pod SecurityContext when RunAsNonRoot required")
 	}
@@ -282,7 +282,7 @@ func TestPodValidatorNilContainerSecurityContextDenied(t *testing.T) {
 			},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if resp.Allowed {
 		t.Fatalf("expected pod to be denied: nil container SecurityContext when ReadOnlyRootFilesystem required")
 	}
@@ -307,7 +307,7 @@ func TestPodValidatorNoContainersReadOnlyBaselineAllowed(t *testing.T) {
 
 	// Pod with no containers or init containers: the ReadOnly loops never execute → allowed
 	pod := &corev1.Pod{}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod with no containers to be allowed (vacuously true for ReadOnlyRootFilesystem): %s", resp.Result.Message)
 	}
@@ -347,7 +347,7 @@ func TestPodValidatorMultipleBaselinesAllSatisfied(t *testing.T) {
 			},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod satisfying all baselines to be allowed: %s", resp.Result.Message)
 	}
@@ -388,7 +388,7 @@ func TestPodValidatorMultipleInitContainersOneViolates(t *testing.T) {
 			},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if resp.Allowed {
 		t.Fatalf("expected pod to be denied: second init container violates ReadOnlyRootFilesystem")
 	}
@@ -420,7 +420,7 @@ func TestPodValidatorWarnModeAllowsWithWarnings(t *testing.T) {
 			},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod to be allowed in Warn mode, got denied: %v", resp.Result)
 	}
@@ -455,7 +455,7 @@ func TestPodValidatorAuditModeAllowsSilently(t *testing.T) {
 			},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod to be allowed in Audit mode, got denied: %v", resp.Result)
 	}
@@ -491,7 +491,7 @@ func TestPodValidatorAggregatesMultipleViolations(t *testing.T) {
 			},
 		},
 	}
-	resp := validator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := validator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if resp.Allowed {
 		t.Fatalf("expected pod to be denied")
 	}
@@ -514,7 +514,10 @@ func newWebhookTestScheme(t *testing.T) *runtime.Scheme {
 	return scheme
 }
 
-func newAdmissionRequest(t *testing.T, namespace string, pod *corev1.Pod) admission.Request {
+// testNamespace is the namespace every admission request in these tests targets.
+const testNamespace = "team-a"
+
+func newAdmissionRequest(t *testing.T, pod *corev1.Pod) admission.Request {
 	t.Helper()
 
 	rawPod, err := json.Marshal(pod)
@@ -524,7 +527,7 @@ func newAdmissionRequest(t *testing.T, namespace string, pod *corev1.Pod) admiss
 
 	return admission.Request{
 		AdmissionRequest: admissionv1.AdmissionRequest{
-			Namespace: namespace,
+			Namespace: testNamespace,
 			Object: runtime.RawExtension{
 				Raw: rawPod,
 			},

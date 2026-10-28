@@ -254,7 +254,7 @@ func TestPodMutatorHandleFullFlow(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod to be allowed (mutating webhook), got denied")
 	}
@@ -280,7 +280,7 @@ func TestPodMutatorHandleNoMutationsNeeded(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod to be allowed when no policies exist")
 	}
@@ -319,7 +319,7 @@ func TestPodMutatorHandleSkipsInvalidPolicyAndAppliesValid(t *testing.T) {
 			Containers: []corev1.Container{{Name: "app"}},
 		},
 	}
-	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod to be allowed even when one policy has invalid config")
 	}
@@ -385,7 +385,7 @@ func TestPodMutatorEmptyContainersList(t *testing.T) {
 
 	// Pod with zero containers: label injection still happens, resource injection is a no-op
 	pod := &corev1.Pod{}
-	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, "team-a", pod))
+	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, pod))
 	if !resp.Allowed {
 		t.Fatalf("expected pod with no containers to be allowed")
 	}

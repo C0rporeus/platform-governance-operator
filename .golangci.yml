@@ -45,6 +45,10 @@ linters:
           - dupl
           - lll
         path: internal/*
+      # Repeated literals in test fixtures (labels, namespaces) read better inline.
+      - linters:
+          - goconst
+        path: _test\.go
     paths:
       - third_party$
       - builtin$

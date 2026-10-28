@@ -254,7 +254,8 @@ var _ = Describe("WorkloadPolicy HPA Integration", func() {
 			Expect(hpaExists(testCtx, testNs, deployment.Name)).To(BeTrue())
 
 			// Disable via annotation
-			Expect(k8sClient.Get(testCtx, types.NamespacedName{Name: deployment.Name, Namespace: testNs}, deployment)).To(Succeed())
+			key := types.NamespacedName{Name: deployment.Name, Namespace: testNs}
+			Expect(k8sClient.Get(testCtx, key, deployment)).To(Succeed())
 			if deployment.Annotations == nil {
 				deployment.Annotations = map[string]string{}
 			}

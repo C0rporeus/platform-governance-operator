@@ -17,82 +17,26 @@ limitations under the License.
 package integration
 
 import (
-	"context"
-
 	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
 	"github.com/f3nr1r/platform-governance-operator/internal/controller"
 )
 
-var _ = Describe("TelemetryProfile Controller", func() {
-	Context("When reconciling a resource", func() {
-		const resourceName = "test-telemetryprofile"
-
-		ctx := context.Background()
-
-		typeNamespacedName := types.NamespacedName{
-			Name:      resourceName,
-			Namespace: "default",
+var _ = Describe("TelemetryProfile Controller", controllerSmokeBody(controllerSmokeSpec{
+	Kind:         "TelemetryProfile",
+	ResourceName: "test-telemetryprofile",
+	NewObject:    func() client.Object { return &corev1alpha1.TelemetryProfile{} },
+	NewReconciler: func() reconcile.Reconciler {
+		return &controller.TelemetryProfileReconciler{
+			Client:   k8sClient,
+			Scheme:   k8sClient.Scheme(),
+			Recorder: record.NewFakeRecorder(10),
 		}
-		telemetryprofile := &corev1alpha1.TelemetryProfile{}
-
-		BeforeEach(func() {
-			By("creating the custom resource for the Kind TelemetryProfile")
-			err := k8sClient.Get(ctx, typeNamespacedName, telemetryprofile)
-			if err != nil && errors.IsNotFound(err) {
-				resource := &corev1alpha1.TelemetryProfile{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      resourceName,
-						Namespace: "default",
-					},
-				}
-				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
-			}
-		})
-
-		AfterEach(func() {
-			resource := &corev1alpha1.TelemetryProfile{}
-			err := k8sClient.Get(ctx, typeNamespacedName, resource)
-			Expect(err).NotTo(HaveOccurred())
-
-			By("Cleanup the specific resource instance TelemetryProfile")
-			Expect(k8sClient.Delete(ctx, resource)).To(Succeed())
-		})
-
-		It("should successfully reconcile the resource", func() {
-			By("Reconciling the created resource")
-			controllerReconciler := &controller.TelemetryProfileReconciler{
-				Client:   k8sClient,
-				Scheme:   k8sClient.Scheme(),
-				Recorder: record.NewFakeRecorder(10),
-			}
-
-			_, err := controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			reconciled := &corev1alpha1.TelemetryProfile{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, reconciled)).To(Succeed())
-			expectAvailableCondition(reconciled.Status.Conditions)
-			resourceVersionAfterFirstReconcile := reconciled.ResourceVersion
-
-			_, err = controllerReconciler.Reconcile(ctx, reconcile.Request{
-				NamespacedName: typeNamespacedName,
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			reconciledAfterSecondRun := &corev1alpha1.TelemetryProfile{}
-			Expect(k8sClient.Get(ctx, typeNamespacedName, reconciledAfterSecondRun)).To(Succeed())
-			Expect(reconciledAfterSecondRun.ResourceVersion).To(Equal(resourceVersionAfterFirstReconcile))
-			expectAvailableCondition(reconciledAfterSecondRun.Status.Conditions)
-		})
-	})
-})
+	},
+	Conditions: func(o client.Object) []metav1.Condition { return o.(*corev1alpha1.TelemetryProfile).Status.Conditions },
+}))

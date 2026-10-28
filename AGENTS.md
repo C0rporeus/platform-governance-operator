@@ -4,7 +4,7 @@ This file provides guidance to Claude Code when working with the `platform-gover
 
 ## Overview
 
-A **Kubernetes Operator** that enforces platform governance through three Custom Resource Definitions (CRDs) and five admission webhooks. It acts as a security and standards enforcement layer over any Kubernetes cluster.
+A **Kubernetes Operator** that enforces platform governance through four Custom Resource Definitions (CRDs) — `SecurityBaseline`, `ClusterSecurityBaseline`, `WorkloadPolicy`, `TelemetryProfile` — and their admission webhooks (Pod validating/mutating plus per-CRD validating/defaulting). It acts as a security and standards enforcement layer over any Kubernetes cluster.
 
 - **Domain:** `platform.f3nr1r.io`
 - **Group:** `core.platform.f3nr1r.io`
@@ -18,12 +18,14 @@ A **Kubernetes Operator** that enforces platform governance through three Custom
 cmd/main.go                         Manager entry point (registers controllers + webhooks)
 api/v1alpha1/                       CRD type definitions (kubebuilder markers live here)
   securitybaseline_types.go
+  clustersecuritybaseline_types.go  Cluster-scoped baseline: embeds SecurityBaselineSpec + namespaceSelector
   workloadpolicy_types.go
   telemetryprofile_types.go
   policy_target_types.go            PolicyTargetReference + PolicyTargeting (embedded in all 3 specs)
   zz_generated.deepcopy.go          AUTO-GENERATED — never edit
 internal/controller/                Reconciliation logic (one file per CRD)
   securitybaseline_controller.go
+  clustersecuritybaseline_controller.go
   workloadpolicy_controller.go      Includes HPA lifecycle management
   telemetryprofile_controller.go
   reconcile_status_helper.go        Shared status condition helpers
@@ -32,6 +34,7 @@ internal/controller/                Reconciliation logic (one file per CRD)
 internal/policy/                    Pure in-memory policy resolution (no API calls)
   resolver.go                       Specificity ordering: targetRef > selector > namespace > cluster; generic Select()
   subject.go                        SubjectForPod (Pod + owners + Deployment derived from ReplicaSet) / SubjectForDeployment
+  cluster.go                        DefaultExcludedNamespaces, IsClusterExcluded, NamespaceMatches
   validate.go                       ValidateTargeting (used by the CRD validating webhooks)
   index.go                          Field index `spec.policyScope` (registered in cmd/main.go)
 internal/webhook/
@@ -285,6 +288,15 @@ Every policy kind embeds `PolicyTargeting` (`targetRef` | `selector`; neither = 
 - **HPA ownership is per Deployment**, not per namespace: the most specific `WorkloadPolicy` with `horizontalScaling` governs each Deployment. When a Deployment stops being governed by any policy, the policy that created its managed HPA deletes it; unmanaged HPAs are never touched.
 - **Invalid selectors** are rejected by the CRD validating webhooks (`ValidateTargeting`); if one still reaches admission (webhooks disabled) it is logged and skipped.
 - The `spec.policyScope` field index is registered but admission currently lists from the namespace-scoped informer cache and filters in memory; use the index if lists ever become large.
+
+## Cluster-wide Baselines (`ClusterSecurityBaseline`)
+
+- Cluster-scoped CRD; its spec embeds `SecurityBaselineSpec` (all rules, `enforcementAction`, `excludedNamespaces`) and adds `namespaceSelector`. `targetRef` is rejected (CEL on the CRD + validating webhook); the inherited `selector` matches Pod labels.
+- **Inheritance is additive:** `PodValidator.applicableBaselines` evaluates cluster baselines first, then the namespace's `SecurityBaseline`s. A namespaced baseline can add rules but never relax a cluster one (each baseline keeps its own `enforcementAction`).
+- **Default exclusions** (never governed by a cluster baseline): `kube-system`, `kube-public`, `cert-manager`, the operator namespace (`POD_NAMESPACE` env, set via downward API in `config/manager/manager.yaml`) and the baseline's `excludedNamespaces`. This is evaluation-level only; excluding them from the webhook *configuration* (the real anti-deadlock guard with `failurePolicy: Fail`) is `HU-03.2`.
+- **Fail closed:** if a `namespaceSelector` is set and the Namespace cannot be read, the validator returns 500 instead of skipping the baseline. An invalid `namespaceSelector` is rejected at write time; if one still reaches admission it is logged and skipped.
+- RBAC: the manager needs `get/list/watch` on `namespaces` (kubebuilder marker in `clustersecuritybaseline_controller.go`).
+- `PROJECT` was updated by hand for this kind (no `kubebuilder` CLI available); re-run `kubebuilder edit` checks if the CLI is installed later.
 
 ## Configuration
 

@@ -30,7 +30,9 @@ internal/controller/                Reconciliation logic (one file per CRD)
   reconcile_status_helper_test.go   Unit tests for unexported status helper
   workloadpolicy_hpa_test.go        Unit tests for unexported HPA helpers
 internal/policy/                    Pure in-memory policy resolution (no API calls)
-  resolver.go                       Specificity ordering: targetRef > selector > namespace > cluster
+  resolver.go                       Specificity ordering: targetRef > selector > namespace > cluster; generic Select()
+  subject.go                        SubjectForPod (Pod + owners + Deployment derived from ReplicaSet) / SubjectForDeployment
+  validate.go                       ValidateTargeting (used by the CRD validating webhooks)
   index.go                          Field index `spec.policyScope` (registered in cmd/main.go)
 internal/webhook/
   v1alpha1/                         CRD defaulting/validating webhooks
@@ -272,6 +274,17 @@ var _ = Describe("FooController", func() {
 - `internal/webhook/v1alpha1/webhook_suite_test.go` — webhook suite setup
 - CRDs loaded from `config/crd/bases/` by envtest (requires `make manifests` first)
 - Black-box tests import the controller package: `controller.WorkloadPolicyReconciler{...}`
+
+## Policy Targeting
+
+Every policy kind embeds `PolicyTargeting` (`targetRef` | `selector`; neither = whole namespace).
+
+- **Precedence:** `targetRef` > `selector` > namespace-wide > cluster; ties break by `priority` (higher wins), then namespace/name. A policy with both fields set is treated as `targetRef`.
+- **Pods:** `PodValidator`/`PodMutator` call `policy.Select(items, policy.SubjectForPod(pod), ...)`. The Deployment ref is derived from the ReplicaSet owner only if the RS name ends with the Pod's `pod-template-hash` label; otherwise no Deployment ref is produced (a `targetRef` to that Deployment then does not match).
+- **Selectors** match Pod labels at admission and the Deployment's *pod template* labels in the HPA reconciler.
+- **HPA ownership is per Deployment**, not per namespace: the most specific `WorkloadPolicy` with `horizontalScaling` governs each Deployment. When a Deployment stops being governed by any policy, the policy that created its managed HPA deletes it; unmanaged HPAs are never touched.
+- **Invalid selectors** are rejected by the CRD validating webhooks (`ValidateTargeting`); if one still reaches admission (webhooks disabled) it is logged and skipped.
+- The `spec.policyScope` field index is registered but admission currently lists from the namespace-scoped informer cache and filters in memory; use the index if lists ever become large.
 
 ## Configuration
 

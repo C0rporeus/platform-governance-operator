@@ -1,0 +1,20 @@
+# Corporate baseline applied to every namespace except kube-system, kube-public,
+# cert-manager, the operator namespace and the ones listed in excludedNamespaces.
+# Namespaced SecurityBaselines add to it; they cannot relax it.
+apiVersion: core.platform.f3nr1r.io/v1alpha1
+kind: ClusterSecurityBaseline
+metadata:
+  name: corporate-baseline
+spec:
+  enforcementAction: Warn   # start in Warn, then move to Enforce once clean
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  disallowPrivileged: true
+  disallowPrivilegeEscalation: true
+  namespaceSelector:
+    matchExpressions:
+    - key: platform.f3nr1r.io/baseline
+      operator: NotIn
+      values: ["exempt"]
+  excludedNamespaces:
+  - monitoring

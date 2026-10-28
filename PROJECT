@@ -48,4 +48,15 @@ resources:
     defaulting: true
     validation: true
     webhookVersion: v1
+- api:
+    crdVersion: v1
+  controller: true
+  domain: platform.f3nr1r.io
+  group: core
+  kind: ClusterSecurityBaseline
+  path: github.com/f3nr1r/platform-governance-operator/api/v1alpha1
+  version: v1alpha1
+  webhooks:
+    validation: true
+    webhookVersion: v1
 version: "3"

@@ -32,3 +32,6 @@ resources:
 - securitybaseline_editor_role.yaml
 - securitybaseline_viewer_role.yaml
 
+- clustersecuritybaseline_admin_role.yaml
+- clustersecuritybaseline_editor_role.yaml
+- clustersecuritybaseline_viewer_role.yaml

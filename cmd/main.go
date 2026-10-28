@@ -194,6 +194,15 @@ func main() {
 		setupLog.Error(err, "Failed to create controller", "controller", "SecurityBaseline")
 		os.Exit(1)
 	}
+	if err := (&controller.ClusterSecurityBaselineReconciler{
+		Client: mgr.GetClient(),
+		Scheme: mgr.GetScheme(),
+		//nolint:staticcheck // controller-runtime recorder migration pending
+		Recorder: mgr.GetEventRecorderFor("clustersecuritybaseline-controller"),
+	}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "Failed to create controller", "controller", "ClusterSecurityBaseline")
+		os.Exit(1)
+	}
 	if err := (&controller.WorkloadPolicyReconciler{
 		Client: mgr.GetClient(),
 		Scheme: mgr.GetScheme(),
@@ -215,6 +224,10 @@ func main() {
 	if os.Getenv("ENABLE_WEBHOOKS") != "false" {
 		if err := webhookv1alpha1.SetupSecurityBaselineWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "Failed to create webhook", "webhook", "SecurityBaseline")
+			os.Exit(1)
+		}
+		if err := webhookv1alpha1.SetupClusterSecurityBaselineWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "Failed to create webhook", "webhook", "ClusterSecurityBaseline")
 			os.Exit(1)
 		}
 		if err := webhookv1alpha1.SetupWorkloadPolicyWebhookWithManager(mgr); err != nil {

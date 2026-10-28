@@ -5,6 +5,14 @@ metadata:
   name: manager-role
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - apps
   resources:
   - deployments
@@ -27,6 +35,7 @@ rules:
 - apiGroups:
   - core.platform.f3nr1r.io
   resources:
+  - clustersecuritybaselines
   - securitybaselines
   - telemetryprofiles
   - workloadpolicies
@@ -41,6 +50,7 @@ rules:
 - apiGroups:
   - core.platform.f3nr1r.io
   resources:
+  - clustersecuritybaselines/finalizers
   - securitybaselines/finalizers
   - telemetryprofiles/finalizers
   - workloadpolicies/finalizers
@@ -49,6 +59,7 @@ rules:
 - apiGroups:
   - core.platform.f3nr1r.io
   resources:
+  - clustersecuritybaselines/status
   - securitybaselines/status
   - telemetryprofiles/status
   - workloadpolicies/status

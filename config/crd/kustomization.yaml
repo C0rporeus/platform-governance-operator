@@ -5,6 +5,7 @@ resources:
 - bases/core.platform.f3nr1r.io_securitybaselines.yaml
 - bases/core.platform.f3nr1r.io_workloadpolicies.yaml
 - bases/core.platform.f3nr1r.io_telemetryprofiles.yaml
+- bases/core.platform.f3nr1r.io_clustersecuritybaselines.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

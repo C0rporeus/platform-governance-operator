@@ -66,13 +66,13 @@ type SecurityBaselineCustomValidator struct{}
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type SecurityBaseline.
 func (v *SecurityBaselineCustomValidator) ValidateCreate(_ context.Context, obj *corev1alpha1.SecurityBaseline) (admission.Warnings, error) {
 	securitybaselinelog.Info("Validation for SecurityBaseline upon creation", "name", obj.GetName())
-	return nil, validateSecurityBaselineSpec(obj)
+	return nil, validateSecurityBaselineSpec(&obj.Spec)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type SecurityBaseline.
 func (v *SecurityBaselineCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj *corev1alpha1.SecurityBaseline) (admission.Warnings, error) {
 	securitybaselinelog.Info("Validation for SecurityBaseline upon update", "name", newObj.GetName())
-	return nil, validateSecurityBaselineSpec(newObj)
+	return nil, validateSecurityBaselineSpec(&newObj.Spec)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type SecurityBaseline.
@@ -81,12 +81,12 @@ func (v *SecurityBaselineCustomValidator) ValidateDelete(_ context.Context, obj 
 	return nil, nil
 }
 
-func validateSecurityBaselineSpec(obj *corev1alpha1.SecurityBaseline) error {
-	if err := policy.ValidateTargeting(obj.Spec.PolicyTargeting); err != nil {
+func validateSecurityBaselineSpec(spec *corev1alpha1.SecurityBaselineSpec) error {
+	if err := policy.ValidateTargeting(spec.PolicyTargeting); err != nil {
 		return err
 	}
 
-	for _, namespace := range obj.Spec.ExcludedNamespaces {
+	for _, namespace := range spec.ExcludedNamespaces {
 		if strings.TrimSpace(namespace) == "" {
 			return fmt.Errorf("excludedNamespaces entries cannot be empty")
 		}

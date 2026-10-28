@@ -96,6 +96,26 @@ webhooks:
     service:
       name: webhook-service
       namespace: system
+      path: /validate-core-platform-f3nr1r-io-v1alpha1-clustersecuritybaseline
+  failurePolicy: Fail
+  name: vclustersecuritybaseline-v1alpha1.kb.io
+  rules:
+  - apiGroups:
+    - core.platform.f3nr1r.io
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - clustersecuritybaselines
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
       path: /validate-core-v1-pod
   failurePolicy: Fail
   name: vpod.kb.io

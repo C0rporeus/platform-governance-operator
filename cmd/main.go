@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"flag"
 	"os"
@@ -37,6 +38,7 @@ import (
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
 	"github.com/f3nr1r/platform-governance-operator/internal/controller"
+	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 	corewebhook "github.com/f3nr1r/platform-governance-operator/internal/webhook/core"
 	webhookv1alpha1 "github.com/f3nr1r/platform-governance-operator/internal/webhook/v1alpha1"
 	// +kubebuilder:scaffold:imports
@@ -175,6 +177,11 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "Failed to start manager")
+		os.Exit(1)
+	}
+
+	if err := policy.SetupIndexes(context.Background(), mgr.GetFieldIndexer()); err != nil {
+		setupLog.Error(err, "Failed to register policy field indexes")
 		os.Exit(1)
 	}
 

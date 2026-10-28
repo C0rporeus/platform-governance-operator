@@ -22,6 +22,11 @@ import (
 
 // TelemetryProfileSpec defines the desired state of TelemetryProfile
 type TelemetryProfileSpec struct {
+	// PolicyTargeting restricts the policy to a targetRef or label selector.
+	// Omitting both applies the policy to the whole namespace.
+	// +optional
+	PolicyTargeting `json:",inline"`
+
 	// TracingEndpoint specifies the OpenTelemetry OTLP endpoint to inject
 	// +optional
 	TracingEndpoint string `json:"tracingEndpoint,omitempty"`

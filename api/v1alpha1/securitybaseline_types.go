@@ -36,6 +36,11 @@ const (
 
 // SecurityBaselineSpec defines the desired state of SecurityBaseline
 type SecurityBaselineSpec struct {
+	// PolicyTargeting restricts the policy to a targetRef or label selector.
+	// Omitting both applies the policy to the whole namespace.
+	// +optional
+	PolicyTargeting `json:",inline"`
+
 	// EnforcementAction determines the behavior when a violation occurs.
 	// Can be Enforce, Warn, or Audit. Defaults to Enforce.
 	// +kubebuilder:validation:Enum=Enforce;Warn;Audit

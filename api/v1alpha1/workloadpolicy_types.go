@@ -22,6 +22,11 @@ import (
 
 // WorkloadPolicySpec defines the desired state of WorkloadPolicy
 type WorkloadPolicySpec struct {
+	// PolicyTargeting restricts the policy to a targetRef or label selector.
+	// Omitting both applies the policy to the whole namespace.
+	// +optional
+	PolicyTargeting `json:",inline"`
+
 	// DefaultRequests defines the default resource requests applied to containers
 	// +optional
 	DefaultRequests map[string]string `json:"defaultRequests,omitempty"`

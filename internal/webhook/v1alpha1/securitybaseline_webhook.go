@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
+	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
 var securitybaselinelog = logf.Log.WithName("securitybaseline-resource")
@@ -81,6 +82,10 @@ func (v *SecurityBaselineCustomValidator) ValidateDelete(_ context.Context, obj 
 }
 
 func validateSecurityBaselineSpec(obj *corev1alpha1.SecurityBaseline) error {
+	if err := policy.ValidateTargeting(obj.Spec.PolicyTargeting); err != nil {
+		return err
+	}
+
 	for _, namespace := range obj.Spec.ExcludedNamespaces {
 		if strings.TrimSpace(namespace) == "" {
 			return fmt.Errorf("excludedNamespaces entries cannot be empty")

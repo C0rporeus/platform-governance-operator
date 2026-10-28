@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	platformv1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
+	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
 var podlog = logf.Log.WithName("pod-webhook")
@@ -56,10 +57,15 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
+	applicable, selectorErrs := policy.Select(baselines.Items, policy.SubjectForPod(pod), securityBaselineCandidate)
+	for _, selErr := range selectorErrs {
+		podlog.Error(selErr, "Skipping SecurityBaseline with invalid selector", "namespace", req.Namespace)
+	}
+
 	var denialReasons []string
 	var warningMessages []string
 
-	for _, baseline := range baselines.Items {
+	for _, baseline := range applicable {
 		if slices.Contains(baseline.Spec.ExcludedNamespaces, req.Namespace) {
 			continue
 		}
@@ -100,6 +106,10 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 	}
 
 	return admission.Allowed("")
+}
+
+func securityBaselineCandidate(b platformv1alpha1.SecurityBaseline) policy.Candidate {
+	return policy.Candidate{Name: b.Name, Namespace: b.Namespace, Targeting: b.Spec.PolicyTargeting}
 }
 
 // SetupPodWebhookWithManager registers the Pod validating webhook with the Manager.

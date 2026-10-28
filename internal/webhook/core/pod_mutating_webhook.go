@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sort"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -16,6 +15,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	platformv1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
+	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
 // PodMutator mutates Pods based on WorkloadPolicy
@@ -54,7 +54,11 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	sortWorkloadPoliciesByPriority(policies.Items)
+	subject := policy.SubjectForPod(pod)
+	applicablePolicies, selectorErrs := policy.Select(policies.Items, subject, workloadPolicyCandidate)
+	for _, selErr := range selectorErrs {
+		podlog.Error(selErr, "Skipping WorkloadPolicy with invalid selector", "namespace", req.Namespace)
+	}
 
 	mutated := false
 
@@ -64,28 +68,31 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	sortTelemetryProfilesByPriority(telemetryProfiles.Items)
+	applicableProfiles, selectorErrs := policy.Select(telemetryProfiles.Items, subject, telemetryProfileCandidate)
+	for _, selErr := range selectorErrs {
+		podlog.Error(selErr, "Skipping TelemetryProfile with invalid selector", "namespace", req.Namespace)
+	}
 
-	telemetryMutated := m.applyTelemetry(pod, telemetryProfiles.Items)
+	telemetryMutated := m.applyTelemetry(pod, applicableProfiles)
 	if telemetryMutated {
 		mutated = true
 	}
 
 	// Apply policies
-	for _, policy := range policies.Items {
-		policyMutated := m.applyPolicyLabels(pod, &policy)
+	for _, wp := range applicablePolicies {
+		policyMutated := m.applyPolicyLabels(pod, &wp)
 
-		resourcesMutated, err := m.applyPolicyResources(pod, &policy)
+		resourcesMutated, err := m.applyPolicyResources(pod, &wp)
 		if err != nil {
 			podlog.Error(err, "Skipping resource defaults from WorkloadPolicy due to invalid configuration",
-				"policy", policy.Name, "namespace", policy.Namespace)
+				"policy", wp.Name, "namespace", wp.Namespace)
 			continue
 		}
 		policyMutated = policyMutated || resourcesMutated
 
 		if policyMutated {
 			mutated = true
-			m.Recorder.Event(&policy, "Normal", "PodMutated", fmt.Sprintf("Applied workload policy defaults to Pod %s in namespace %s", pod.Name, pod.Namespace))
+			m.Recorder.Event(&wp, "Normal", "PodMutated", fmt.Sprintf("Applied workload policy defaults to Pod %s in namespace %s", pod.Name, pod.Namespace))
 		}
 	}
 
@@ -101,16 +108,12 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	return admission.PatchResponseFromRaw(req.Object.Raw, marshaledPod)
 }
 
-func sortWorkloadPoliciesByPriority(policies []platformv1alpha1.WorkloadPolicy) {
-	sort.Slice(policies, func(i, j int) bool {
-		return policies[i].Spec.Priority > policies[j].Spec.Priority
-	})
+func workloadPolicyCandidate(p platformv1alpha1.WorkloadPolicy) policy.Candidate {
+	return policy.Candidate{Name: p.Name, Namespace: p.Namespace, Priority: p.Spec.Priority, Targeting: p.Spec.PolicyTargeting}
 }
 
-func sortTelemetryProfilesByPriority(profiles []platformv1alpha1.TelemetryProfile) {
-	sort.Slice(profiles, func(i, j int) bool {
-		return profiles[i].Spec.Priority > profiles[j].Spec.Priority
-	})
+func telemetryProfileCandidate(p platformv1alpha1.TelemetryProfile) policy.Candidate {
+	return policy.Candidate{Name: p.Name, Namespace: p.Namespace, Priority: p.Spec.Priority, Targeting: p.Spec.PolicyTargeting}
 }
 
 func (m *PodMutator) applyTelemetry(pod *corev1.Pod, profiles []platformv1alpha1.TelemetryProfile) bool {
@@ -147,13 +150,13 @@ func (m *PodMutator) applyTelemetry(pod *corev1.Pod, profiles []platformv1alpha1
 	return mutated
 }
 
-func (m *PodMutator) applyPolicyLabels(pod *corev1.Pod, policy *platformv1alpha1.WorkloadPolicy) bool {
+func (m *PodMutator) applyPolicyLabels(pod *corev1.Pod, wp *platformv1alpha1.WorkloadPolicy) bool {
 	if pod.Labels == nil {
 		pod.Labels = make(map[string]string)
 	}
 
 	mutated := false
-	for lbl, defaultVal := range policy.Spec.MandatoryLabels {
+	for lbl, defaultVal := range wp.Spec.MandatoryLabels {
 		if _, exists := pod.Labels[lbl]; !exists {
 			pod.Labels[lbl] = defaultVal
 			mutated = true
@@ -163,13 +166,13 @@ func (m *PodMutator) applyPolicyLabels(pod *corev1.Pod, policy *platformv1alpha1
 	return mutated
 }
 
-func (m *PodMutator) applyPolicyResources(pod *corev1.Pod, policy *platformv1alpha1.WorkloadPolicy) (bool, error) {
+func (m *PodMutator) applyPolicyResources(pod *corev1.Pod, wp *platformv1alpha1.WorkloadPolicy) (bool, error) {
 	mutated := false
 	for i := range pod.Spec.Containers {
 		if pod.Spec.Containers[i].Resources.Requests == nil {
 			pod.Spec.Containers[i].Resources.Requests = make(corev1.ResourceList)
 		}
-		for rName, rVal := range policy.Spec.DefaultRequests {
+		for rName, rVal := range wp.Spec.DefaultRequests {
 			rn := corev1.ResourceName(rName)
 			if _, exists := pod.Spec.Containers[i].Resources.Requests[rn]; exists {
 				continue
@@ -179,7 +182,7 @@ func (m *PodMutator) applyPolicyResources(pod *corev1.Pod, policy *platformv1alp
 			if parseErr != nil {
 				return false, fmt.Errorf(
 					"WorkloadPolicy %s has invalid defaultRequests quantity for %s: %q",
-					policy.Name,
+					wp.Name,
 					rName,
 					rVal,
 				)
@@ -191,7 +194,7 @@ func (m *PodMutator) applyPolicyResources(pod *corev1.Pod, policy *platformv1alp
 		if pod.Spec.Containers[i].Resources.Limits == nil {
 			pod.Spec.Containers[i].Resources.Limits = make(corev1.ResourceList)
 		}
-		for rName, rVal := range policy.Spec.DefaultLimits {
+		for rName, rVal := range wp.Spec.DefaultLimits {
 			rn := corev1.ResourceName(rName)
 			if _, exists := pod.Spec.Containers[i].Resources.Limits[rn]; exists {
 				continue
@@ -201,7 +204,7 @@ func (m *PodMutator) applyPolicyResources(pod *corev1.Pod, policy *platformv1alp
 			if parseErr != nil {
 				return false, fmt.Errorf(
 					"WorkloadPolicy %s has invalid defaultLimits quantity for %s: %q",
-					policy.Name,
+					wp.Name,
 					rName,
 					rVal,
 				)

@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
+	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
 var workloadpolicylog = logf.Log.WithName("workloadpolicy-resource")
@@ -95,6 +96,10 @@ func (v *WorkloadPolicyCustomValidator) ValidateDelete(_ context.Context, obj *c
 }
 
 func validateWorkloadPolicySpec(obj *corev1alpha1.WorkloadPolicy) error {
+	if err := policy.ValidateTargeting(obj.Spec.PolicyTargeting); err != nil {
+		return err
+	}
+
 	for resourceName, resourceValue := range obj.Spec.DefaultRequests {
 		if _, err := resource.ParseQuantity(resourceValue); err != nil {
 			return fmt.Errorf("invalid defaultRequests quantity for %q: %q", resourceName, resourceValue)

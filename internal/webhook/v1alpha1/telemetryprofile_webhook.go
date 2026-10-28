@@ -27,6 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
+	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
 var telemetryprofilelog = logf.Log.WithName("telemetryprofile-resource")
@@ -82,6 +83,10 @@ func (v *TelemetryProfileCustomValidator) ValidateDelete(_ context.Context, obj 
 }
 
 func validateTelemetryProfileSpec(obj *corev1alpha1.TelemetryProfile) error {
+	if err := policy.ValidateTargeting(obj.Spec.PolicyTargeting); err != nil {
+		return err
+	}
+
 	if obj.Spec.TracingEndpoint != "" {
 		parsed, err := url.ParseRequestURI(obj.Spec.TracingEndpoint)
 		if err != nil {

@@ -12,6 +12,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	platformv1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
+	policyresolver "github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
 func TestPodMutatorApplyTelemetryUsesHighestPriorityFirst(t *testing.T) {
@@ -44,7 +45,7 @@ func TestPodMutatorApplyTelemetryUsesHighestPriorityFirst(t *testing.T) {
 		},
 	}
 
-	sortTelemetryProfilesByPriority(profiles)
+	profiles, _ = policyresolver.Select(profiles, policyresolver.Subject{}, telemetryProfileCandidate)
 	mutated := mutator.applyTelemetry(pod, profiles)
 	if !mutated {
 		t.Fatalf("expected pod to be mutated")
@@ -577,7 +578,7 @@ func TestContainerHasEnvVar(t *testing.T) {
 	}
 }
 
-func TestSortTelemetryProfilesByPriority(t *testing.T) {
+func TestSelectOrdersTelemetryProfilesByPriority(t *testing.T) {
 	t.Parallel()
 
 	profiles := []platformv1alpha1.TelemetryProfile{
@@ -586,7 +587,7 @@ func TestSortTelemetryProfilesByPriority(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "mid"}, Spec: platformv1alpha1.TelemetryProfileSpec{Priority: 5}},
 	}
 
-	sortTelemetryProfilesByPriority(profiles)
+	profiles, _ = policyresolver.Select(profiles, policyresolver.Subject{}, telemetryProfileCandidate)
 
 	if profiles[0].Name != "high" || profiles[1].Name != "mid" || profiles[2].Name != "low" {
 		t.Fatalf("expected descending priority order, got %s, %s, %s",
@@ -594,7 +595,7 @@ func TestSortTelemetryProfilesByPriority(t *testing.T) {
 	}
 }
 
-func TestSortWorkloadPoliciesByPriority(t *testing.T) {
+func TestSelectOrdersWorkloadPoliciesByPriority(t *testing.T) {
 	t.Parallel()
 
 	policies := []platformv1alpha1.WorkloadPolicy{
@@ -603,7 +604,7 @@ func TestSortWorkloadPoliciesByPriority(t *testing.T) {
 		{ObjectMeta: metav1.ObjectMeta{Name: "mid"}, Spec: platformv1alpha1.WorkloadPolicySpec{Priority: 5}},
 	}
 
-	sortWorkloadPoliciesByPriority(policies)
+	policies, _ = policyresolver.Select(policies, policyresolver.Subject{}, workloadPolicyCandidate)
 
 	if policies[0].Name != "high" || policies[1].Name != "mid" || policies[2].Name != "low" {
 		t.Fatalf("expected descending priority order, got %s, %s, %s",

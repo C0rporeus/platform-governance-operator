@@ -60,6 +60,9 @@ type Candidate struct {
 	ClusterScoped bool
 	Priority      int32
 	Targeting     corev1alpha1.PolicyTargeting
+
+	// index is the position in the slice given to Select; set by Select only.
+	index int
 }
 
 // SpecificityOf returns the specificity of a candidate. A targetRef outranks a
@@ -130,4 +133,21 @@ func Resolve(candidates []Candidate, s Subject) ([]Candidate, []error) {
 
 func containsRef(refs []corev1alpha1.PolicyTargetReference, want corev1alpha1.PolicyTargetReference) bool {
 	return slices.Contains(refs, want)
+}
+
+// Select returns the items that apply to the subject, ordered like Resolve.
+// toCandidate adapts a concrete policy type to a Candidate. Items with an
+// invalid selector are skipped and reported in the returned errors.
+func Select[T any](items []T, s Subject, toCandidate func(T) Candidate) ([]T, []error) {
+	candidates := make([]Candidate, len(items))
+	for i, item := range items {
+		candidates[i] = toCandidate(item)
+		candidates[i].index = i
+	}
+	resolved, errs := Resolve(candidates, s)
+	selected := make([]T, len(resolved))
+	for i, c := range resolved {
+		selected[i] = items[c.index]
+	}
+	return selected, errs
 }

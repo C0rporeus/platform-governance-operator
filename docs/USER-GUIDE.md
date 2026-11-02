@@ -329,7 +329,31 @@ deployment.apps/web configured
 - The default mode is `warn`: you see the warnings and the workload is still applied. Platform teams can switch to `enforce` (`--early-validation-mode=enforce`) once the warnings are gone; then the apply is rejected for the violations Pod admission would reject. `off` disables it.
 - Changing only replicas, labels or annotations of the workload is not evaluated; a change to the Pod template (an image, or `kubectl rollout restart`) is.
 - It is feedback, not the security boundary: if the operator is unavailable the apply goes through, and every Pod is still validated when it is created.
-- It evaluates the Pod template with the operator's own defaults applied (mandatory labels, resources, tracing variables), so a baseline that selects on a mandatory label applies as it will to the Pods. It cannot see what other webhooks (for example a service mesh injecting sidecars) add, or per-Pod names, so a policy that depends on those is only enforced at Pod admission. Closing these gaps is planned (see the project backlog, `HU-02.4`).
+- It evaluates the Pod template with the operator's own defaults applied (mandatory labels, resources, tracing variables), so a baseline that selects on a mandatory label applies as it will to the Pods. By default it cannot see what other webhooks (for example a service mesh injecting sidecars) add,; the opt-in dry-run fidelity below closes that gap (generated Pod names stay unknown, see the limitations).
+
+### Opt-in: see what the whole admission chain will do (dry-run fidelity)
+
+A sidecar injector adds containers after the template is written, so a template that looks compliant can still produce Pods that are rejected. With **dry-run fidelity** the operator also sends a synthetic Pod, built the way the workload's controller would build it, through the whole admission chain as a server-side dry run, and reports what that chain says. Nothing is created.
+
+```bash
+# Installs the default manifests plus the extra permission and its safeguard, and enables the mode
+kustomize build config/dry-run | kubectl apply -f -
+```
+
+```text
+Warning: [early] the Pods would be denied after admission mutation: [RunAsNonRoot / ISO/IEC 27001 A.8.2] app container 'istio-init' must run as non-root (policy: corporate)
+```
+
+It is built so that adopting it does not change your adoption or compliance flow:
+
+- **Opt-in at two levels.** The default install is unchanged and has no new permission. The mode needs the `config/dry-run` overlay; if you pass `--early-validation-fidelity=dry-run` without it, the operator stays on the template check and logs why.
+- **Never stricter than the template check.** In `warn` mode (the adoption mode) nothing is ever rejected. In `enforce` mode only this operator's own baselines reject, as Pod admission would anyway.
+- **Other admission controllers never block you.** What a policy engine, a quota or Pod Security Admission says is shown as a warning only.
+- **It falls back.** A timeout (2 seconds), an API error or a webhook that cannot be dry-run falls back to the template result. The early validation still fails open.
+- **No duplicates.** A violation already reported from the template is not repeated.
+- **No side effects.** No events are written by a dry run, and only a change of the Pod template triggers it.
+
+**The cost, and how it is contained.** The operator needs permission to `create` Pods, and RBAC cannot limit a verb to dry runs. The overlay therefore ships a `ValidatingAdmissionPolicy` that denies any creation of a Pod by the operator's identity that is not a dry run, and the operator enables the mode only if that policy and its binding exist. Only a cluster administrator can change that policy. Requires Kubernetes 1.30 or later. See `docs/adrs/0004-early-validation-fidelity-through-server-side-dry-run.md`.
 
 ### Use the warnings as a change-control gate in CI
 

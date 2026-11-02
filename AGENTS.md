@@ -331,6 +331,8 @@ Every policy kind embeds `PolicyTargeting` (`targetRef` | `selector`; neither = 
 
 ## CI change-control gate (`hack/ci/check-early-warnings.sh`)
 
+**Dry-run fidelity (ADR-0004, `dryrun.go`, `early_dryrun.go`).** The Pod is created only in `APIDryRunner.DryRun`, always with `client.DryRunAll` (`TestPodsAreOnlyCreatedAsDryRuns` pins that the only files calling `Create` are that one and the HPA controller). It adds only what the template evaluation did not report: our own denial after mutation (rejects only in `enforce`), third-party denials and warnings (never reject). Any error or timeout (2s) falls back to the template result. `test/manifests` pins the safeguard identity against what Kustomize deploys and that `config/rbac` never grants `create pods`; the E2E `dryrun_fidelity_test.go` installs the overlay with `make deploy-dry-run`, simulates a root sidecar with a `MutatingAdmissionPolicy` and restores the default install afterwards.
+
 Runs `kubectl apply --dry-run=server` and fails on `Warning: [early]` lines or on an operator rejection (exit codes 0/1/2/3 in the script header and the user guide). Because the early validation fails open, it first checks the operator Deployment has a ready replica and fails with 3 otherwise: a gate that passes while the operator is down verifies nothing. `--allow N` supports gradual adoption. `test/ci` runs it against a fake `kubectl`; the test reads the script on purpose, because `go test` does not track files that only `bash` opens and would serve a cached pass after the script changed.
 
 ## Warnings for policy authors (`policy.TargetingWarnings`)
@@ -373,6 +375,7 @@ Gotchas:
 | `--health-probe-bind-address` | `:8081` | Liveness/readiness probes |
 | `--leader-elect` | `false` | Enable leader election for HA |
 | `--early-validation-mode` | `warn` | Early validation of Deployments/StatefulSets: `off` (webhook not registered), `warn` (warnings only), `enforce` (reject what Pod admission would reject) |
+| `--early-validation-fidelity` | `template` | `template` evaluates the Pod template; `dry-run` also sends a synthetic Pod through the whole admission chain (ADR-0004). Only works with the `config/dry-run` overlay (extra `create pods` + `ValidatingAdmissionPolicy` that allows only dry runs); without the policy and binding the operator stays on `template` and logs why |
 | `--enable-http2` | `false` | Disabled by default (security) |
 | `--webhook-cert-path` | `` | TLS cert directory for webhooks |
 | `--metrics-cert-path` | `` | TLS cert directory for metrics |

@@ -331,6 +331,36 @@ deployment.apps/web configured
 - It is feedback, not the security boundary: if the operator is unavailable the apply goes through, and every Pod is still validated when it is created.
 - It evaluates the Pod template with the operator's own defaults applied (mandatory labels, resources, tracing variables), so a baseline that selects on a mandatory label applies as it will to the Pods. It cannot see what other webhooks (for example a service mesh injecting sidecars) add, or per-Pod names, so a policy that depends on those is only enforced at Pod admission. Closing these gaps is planned (see the project backlog, `HU-02.4`).
 
+### Use the warnings as a change-control gate in CI
+
+`warn` mode never blocks an apply, so by itself it depends on someone reading the warnings. `hack/ci/check-early-warnings.sh` turns them into a gate in your pipeline, without enabling `enforce` in the cluster: it runs `kubectl apply --dry-run=server` against a staging cluster that runs the operator and fails when the early validation reports a violation (or, in `enforce` mode, rejects the apply).
+
+```yaml
+# .github/workflows/policy-gate.yml (copy the script into your repository)
+name: policy-gate
+on: pull_request
+jobs:
+  early-validation:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4          # pin to a commit SHA in your repository
+    - name: Access to the staging cluster
+      run: ./ci/login-to-staging.sh       # however you authenticate today
+    - name: Early validation gate
+      run: ./hack/ci/check-early-warnings.sh --context staging -f k8s/
+```
+
+| Exit code | Meaning |
+| :---: | :--- |
+| 0 | No early warnings |
+| 1 | Violations (or the operator rejected the apply); the warnings are printed in the log |
+| 2 | `kubectl` failed for another reason, or bad usage |
+| 3 | The operator has no ready replica, or cannot be read |
+
+- **Why the operator is checked first.** The early validation fails open: with the operator down an apply produces no warnings, and a gate that passed would have verified nothing. The script reads the operator Deployment (`get deployments` in its namespace; `--no-operator-check` skips it) and fails with code 3 when it cannot confirm a ready replica.
+- **Adopt gradually.** `--allow N` tolerates N warnings. Start with today's count and lower it as teams fix their manifests, in the same Audit, Warn, Enforce spirit as the policies themselves.
+- Run it against a staging cluster with the same policies as production, since the verdict depends on the baselines that exist there.
+
 If a rollout still makes no progress, check `kubectl describe rs` and the namespace events: Pod admission is the final check.
 
 ---
@@ -443,7 +473,7 @@ The suite uses its own kubeconfig (`bin/e2e-kubeconfig`) and refuses to run agai
 
 - Only Pods are enforced. `Deployment`, `StatefulSet`, `DaemonSet`, `Job` and `CronJob` get early feedback (warnings by default); Pods created by other controllers are validated when they are created.
 - Workloads that were already running when a policy was created are not re-evaluated; the early check only looks at template changes. A continuous audit of existing workloads is planned (`HU-02.5`).
-- Warnings are informational. To make them a change-control gate, fail your pipeline when `kubectl apply --dry-run=server` prints `Warning: [early]` (a ready-made script is planned, `TASK-02.6.9`).
+- Warnings are informational. To make them a change-control gate, use `hack/ci/check-early-warnings.sh` in your pipeline (see section 7).
 - If a policy targets a `Pod` or `ReplicaSet` by name, or selects on a label that workload controllers add (`pod-template-hash`, `job-name`, ...), the operator accepts it with a warning on `kubectl apply`: it is only matched when Pods are created, not in the early check. Prefer a `targetRef` to the Deployment or a selector on your own labels.
 - Pods created by controllers outside Kubernetes (for example Argo Rollouts) get no early feedback; Pod admission validates them.
 - Ephemeral containers (`kubectl debug`) are added through a subresource that the webhooks do not intercept.

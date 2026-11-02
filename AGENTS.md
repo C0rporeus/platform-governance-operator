@@ -329,6 +329,10 @@ Every policy kind embeds `PolicyTargeting` (`targetRef` | `selector`; neither = 
 - **Known gaps, tracked as `HU-02.4` (PLAN-003, `0.docs/plans/`):** the early check evaluates the template, not the real Pod. It sees what this operator's own mutator adds (`Defaulter`, see below) but not what third-party mutators add (mesh sidecars; `dry-run` fidelity, `TASK-02.6.5`..`02.6.7`, ADR-0004 proposed), the Pod name, the ReplicaSet hash or the labels workload controllers add (a `targetRef` to a `Pod`/`ReplicaSet`, or a `selector` on `pod-template-hash` and similar, can never match early),  Pod admission still covers all of it. Workloads that were already running before a policy are never re-evaluated until `HU-02.5` (continuous audit).
 - Same namespace exclusions as the Pod webhooks (the operator namespace and `cert-manager` can never be held up by it).
 
+## CI change-control gate (`hack/ci/check-early-warnings.sh`)
+
+Runs `kubectl apply --dry-run=server` and fails on `Warning: [early]` lines or on an operator rejection (exit codes 0/1/2/3 in the script header and the user guide). Because the early validation fails open, it first checks the operator Deployment has a ready replica and fails with 3 otherwise: a gate that passes while the operator is down verifies nothing. `--allow N` supports gradual adoption. `test/ci` runs it against a fake `kubectl`; the test reads the script on purpose, because `go test` does not track files that only `bash` opens and would serve a cached pass after the script changed.
+
 ## Warnings for policy authors (`policy.TargetingWarnings`)
 
 The CRD validating webhooks accept a policy whose targeting the early check cannot evaluate, but return `admission.Warnings` on create and update so its author knows the early feedback will not reflect it: a `targetRef` to a `Pod` or `ReplicaSet` (names and hashes are generated) and a `selector` on a label set by the workload controllers (`pod-template-hash`, `controller-revision-hash`, `job-name`, ...; the list is `controllerManagedLabels`). The policy still applies when the Pods are created.

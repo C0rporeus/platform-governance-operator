@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"k8s.io/apimachinery/pkg/util/yaml"
@@ -90,7 +91,7 @@ func TestEveryWebhookHasAnExplicitShortTimeout(t *testing.T) {
 // The webhook patch must exclude the operator's own namespace, matched on the
 // immutable kubernetes.io/metadata.name label, and that name must equal the
 // namespace Kustomize deploys into. A mismatch silently excludes nothing.
-func TestPodWebhooksExcludeSystemAndOperatorNamespaces(t *testing.T) {
+func TestPodAndWorkloadWebhooksExcludeSystemAndOperatorNamespaces(t *testing.T) {
 	kustomization := readAll(t, "config/default/kustomization.yaml")[0]
 	operatorNamespace, _ := kustomization["namespace"].(string)
 	if operatorNamespace == "" {
@@ -99,7 +100,7 @@ func TestPodWebhooksExcludeSystemAndOperatorNamespaces(t *testing.T) {
 
 	want := []string{"kube-system", "kube-public", "kube-node-lease", "cert-manager", operatorNamespace}
 	patched := webhooksOf(readAll(t, "config/webhook/patches/namespace-selector.yaml"))
-	for _, name := range []string{"mpod.kb.io", "vpod.kb.io"} {
+	for _, name := range []string{"mpod.kb.io", "vpod.kb.io", "vworkload.kb.io"} {
 		wh, ok := patched[name]
 		if !ok {
 			t.Fatalf("%s is not patched", name)
@@ -169,6 +170,43 @@ func TestManagerMemoryLimitDoesNotExceedRequest(t *testing.T) {
 			if request != limit {
 				t.Errorf("memory request %v must equal limit %v", request, limit)
 			}
+		}
+	}
+}
+
+// ADR-0002: the Pod webhooks are the security boundary and fail closed.
+// ADR-0003: the early workload validation is feedback and fails open; if it failed
+// closed, an operator outage would also block the repair of the operator itself.
+func TestFailurePolicyFollowsTheADRs(t *testing.T) {
+	webhooks := webhooksOf(readAll(t, "config/webhook/manifests.yaml"))
+	want := map[string]string{"mpod.kb.io": "Fail", "vpod.kb.io": "Fail", "vworkload.kb.io": "Ignore"}
+	for name, policy := range want {
+		wh, ok := webhooks[name]
+		if !ok {
+			t.Fatalf("%s is not in config/webhook/manifests.yaml", name)
+		}
+		if wh["failurePolicy"] != policy {
+			t.Errorf("%s: failurePolicy = %v, want %s", name, wh["failurePolicy"], policy)
+		}
+	}
+}
+
+// The early validation only has a Pod template to evaluate on create or when the
+// template changes. The API server filters the rest with a match condition, so the
+// controllers' constant updates to workloads never reach the webhook.
+func TestEarlyValidationIsOnlyCalledWhenThePodTemplateChanges(t *testing.T) {
+	wh, ok := webhooksOf(readAll(t, "config/webhook/patches/namespace-selector.yaml"))["vworkload.kb.io"]
+	if !ok {
+		t.Fatal("vworkload.kb.io is not patched")
+	}
+	conditions, _ := wh["matchConditions"].([]any)
+	if len(conditions) != 1 {
+		t.Fatalf("expected one match condition, got %d", len(conditions))
+	}
+	expression, _ := conditions[0].(object)["expression"].(string)
+	for _, want := range []string{"request.operation == 'CREATE'", "object.spec.template != oldObject.spec.template"} {
+		if !strings.Contains(expression, want) {
+			t.Errorf("match condition %q does not contain %q", expression, want)
 		}
 	}
 }

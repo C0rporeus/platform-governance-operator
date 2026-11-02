@@ -46,3 +46,23 @@ webhooks:
       - kube-node-lease
       - cert-manager
       - platform-governance-operator-system
+- name: vworkload.kb.io
+  # Early validation of Deployments and StatefulSets (ADR-0003: fails open). Same
+  # namespace exclusions as the Pod webhooks, so the operator's own workloads and
+  # cert-manager are never held up by it.
+  namespaceSelector:
+    matchExpressions:
+    - key: kubernetes.io/metadata.name
+      operator: NotIn
+      values:
+      - kube-system
+      - kube-public
+      - kube-node-lease
+      - cert-manager
+      - platform-governance-operator-system
+  # Evaluated by the API server: the webhook is only called when there is a Pod
+  # template to look at. The controller keeps updating annotations, replicas and
+  # status of workloads that already violate a policy; none of that reaches the webhook.
+  matchConditions:
+  - name: pod-template-changed
+    expression: "request.operation == 'CREATE' || object.spec.template != oldObject.spec.template"

@@ -215,3 +215,90 @@ func TestEarlyValidationIsOnlyCalledWhenThePodTemplateChanges(t *testing.T) {
 		}
 	}
 }
+
+// The dry-run overlay (ADR-0004) gives the operator `create pods`. RBAC cannot limit a
+// verb to dry runs, so the safeguard policy is the only thing between a compromised
+// operator and real Pods. Its identity is a literal and must match what Kustomize deploys.
+func TestDryRunSafeguardNamesTheDeployedIdentity(t *testing.T) {
+	// Identity built from config/default: <namespace>:<namePrefix><ServiceAccount>.
+	def := string(mustRead(t, "config/default/kustomization.yaml"))
+	namespace := kustomizeScalar(t, def, "namespace")
+	prefix := kustomizeScalar(t, def, "namePrefix")
+	sa := get(readAll(t, "config/rbac/service_account.yaml")[0], "metadata", "name").(string)
+	username := "system:serviceaccount:" + namespace + ":" + prefix + sa
+
+	safeguard := readAll(t, "config/dry-run/dryrun-safeguard.yaml")
+	var policy, binding object
+	for _, d := range safeguard {
+		switch d["kind"] {
+		case "ValidatingAdmissionPolicy":
+			policy = d
+		case "ValidatingAdmissionPolicyBinding":
+			binding = d
+		}
+	}
+	if policy == nil || binding == nil {
+		t.Fatal("the safeguard needs a ValidatingAdmissionPolicy and its binding")
+	}
+	conditions, _ := get(policy, "spec", "matchConditions").([]any)
+	if len(conditions) != 1 || !strings.Contains(get(conditions[0], "expression").(string), "'"+username+"'") {
+		t.Errorf("the policy must match the operator identity %q", username)
+	}
+	validations, _ := get(policy, "spec", "validations").([]any)
+	if len(validations) != 1 || !strings.Contains(get(validations[0], "expression").(string), "request.dryRun == true") {
+		t.Error("the policy must require request.dryRun == true")
+	}
+	if get(policy, "spec", "failurePolicy") != "Fail" {
+		t.Error("the safeguard must fail closed")
+	}
+	if get(binding, "spec", "policyName") != get(policy, "metadata", "name") {
+		t.Error("the binding must reference the policy")
+	}
+	if actions, _ := get(binding, "spec", "validationActions").([]any); len(actions) != 1 || actions[0] != "Deny" {
+		t.Error("the binding must Deny, not only Warn or Audit")
+	}
+
+	for _, d := range readAll(t, "config/dry-run/dryrun-rbac.yaml") {
+		if d["kind"] != "ClusterRoleBinding" {
+			continue
+		}
+		subject := get(d, "subjects").([]any)[0]
+		if get(subject, "name") != prefix+sa || get(subject, "namespace") != namespace {
+			t.Errorf("the dry-run binding must target %s/%s", namespace, prefix+sa)
+		}
+	}
+}
+
+// The default install must not be able to create Pods: the permission is opt-in.
+func TestDefaultInstallCannotCreatePods(t *testing.T) {
+	for _, d := range readAll(t, "config/rbac/role.yaml") {
+		rules, _ := d["rules"].([]any)
+		for _, r := range rules {
+			resources, _ := get(r, "resources").([]any)
+			verbs, _ := get(r, "verbs").([]any)
+			if slices.Contains(resources, any("pods")) && slices.Contains(verbs, any("create")) {
+				t.Fatal("config/rbac must not grant create on pods; it belongs to the opt-in config/dry-run overlay")
+			}
+		}
+	}
+}
+
+func mustRead(t *testing.T, rel string) []byte {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return raw
+}
+
+func kustomizeScalar(t *testing.T, doc, key string) string {
+	t.Helper()
+	for _, line := range strings.Split(doc, "\n") {
+		if value, ok := strings.CutPrefix(line, key+":"); ok {
+			return strings.TrimSpace(value)
+		}
+	}
+	t.Fatalf("%s not found in config/default/kustomization.yaml", key)
+	return ""
+}

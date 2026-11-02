@@ -1,0 +1,21 @@
+# Opt-in overlay: early validation with server-side dry-run fidelity (ADR-0004).
+#
+#   kustomize build config/dry-run | kubectl apply -f -
+#
+# It installs everything in config/default and adds:
+#   - a ClusterRole that lets the operator `create` Pods and read the safeguard,
+#   - a ValidatingAdmissionPolicy (+ binding) that denies any NON-dry-run Pod
+#     creation by the operator's identity,
+#   - the --early-validation-fidelity=dry-run flag.
+# RBAC cannot restrict a verb to dry runs, so the policy is what keeps the
+# operator from ever creating a real Pod. The operator refuses to enable the
+# mode when the policy or its binding is missing.
+resources:
+  - ../default
+  - dryrun-rbac.yaml
+  - dryrun-safeguard.yaml
+patches:
+  - path: manager-fidelity-patch.yaml
+    target:
+      kind: Deployment
+      name: platform-governance-operator-controller-manager

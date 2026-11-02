@@ -1,0 +1,28 @@
+# Names are literal (not prefixed by kustomize): they must match config/default
+# (namePrefix + namespace + ServiceAccount). test/manifests pins that.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-governance-operator-dryrun
+rules:
+  # Create is only ever called with DryRunAll; the safeguard policy enforces it.
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [create]
+  # Read-only, to verify at startup that the safeguard is installed.
+  - apiGroups: [admissionregistration.k8s.io]
+    resources: [validatingadmissionpolicies, validatingadmissionpolicybindings]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: platform-governance-operator-dryrun
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: platform-governance-operator-dryrun
+subjects:
+  - kind: ServiceAccount
+    name: platform-governance-operator-controller-manager
+    namespace: platform-governance-operator-system

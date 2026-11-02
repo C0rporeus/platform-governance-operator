@@ -1,0 +1,27 @@
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: platform-governance-operator-dryrun-only
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    resourceRules:
+      - apiGroups: [""]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["pods"]
+  matchConditions:
+    - name: created-by-the-operator
+      expression: "request.userInfo.username == 'system:serviceaccount:platform-governance-operator-system:platform-governance-operator-controller-manager'"
+  validations:
+    - expression: "has(request.dryRun) && request.dryRun == true"
+      message: "the platform-governance-operator identity may create Pods only as a server-side dry run"
+      reason: Forbidden
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: platform-governance-operator-dryrun-only
+spec:
+  policyName: platform-governance-operator-dryrun-only
+  validationActions: [Deny]

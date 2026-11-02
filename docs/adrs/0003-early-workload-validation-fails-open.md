@@ -4,7 +4,7 @@ Date: 2026-10-28
 
 ## Status
 
-Proposed
+Accepted (2026-11-02), together with design decisions D1–D6 of PLAN-002.
 
 ## Context
 
@@ -29,3 +29,10 @@ The webhook only evaluates when `spec.template` changes, never on `DELETE` or su
 *   **Requirement:** both paths must share one evaluation implementation and be covered by a parity test, otherwise `enforce` could reject a workload whose Pods would be admitted.
 
 See `PLAN-002` in the `0.docs` workspace for the full design and risk register.
+
+## Related decisions (2026-11-02)
+
+*   Minimum supported Kubernetes version is **1.30** (CRD validation rules and the `quantity` library are stable, CRD validation ratcheting is on by default).
+*   CRD invariants move to CEL; the CRD validating webhooks stay only for what CEL cannot check (structural validity of `LabelSelector`).
+*   `ValidatingAdmissionPolicy` for early validation is deferred: it cannot reuse the Go rules without duplicating them.
+*   The default mode stays `warn`; whether to switch to `enforce` is reviewed when EPIC-03 closes.

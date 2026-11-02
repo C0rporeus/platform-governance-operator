@@ -140,10 +140,11 @@ metadata:
 ## Getting Started
 
 ### Prerequisites
-- go version v1.24+
+- go version v1.25+ (see `go` in `go.mod`; CI also runs the latest stable release).
 - docker version 17.03+.
-- kubectl version v1.11.3+.
+- `kubectl` compatible with your cluster. The operator uses `apiextensions.k8s.io/v1` CRDs and `admissionregistration.k8s.io/v1` webhooks; integration tests run against Kubernetes 1.35 (`envtest`).
 - Access to a Kubernetes cluster (e.g., kind, k3d).
+- cert-manager installed in the cluster (it issues the webhook serving certificates).
 
 ### To Deploy on the cluster
 **Build and push your image to the location specified by `IMG`:**
@@ -174,6 +175,7 @@ To run end-to-end tests locally using `kind`:
 
 ## Documentation
 
+- [Good practices evidence and design basis](./docs/GOOD-PRACTICES-EVIDENCE.md): the researched practices (Kubernetes / CNCF, OpenSSF, Google, AWS Well-Architected, ISO 27001) behind the design, the source register with verification levels, the decisions they informed, declared deviations and traceability to tests
 - [Architecture Decision Records (ADRs)](./docs/adrs/)
 - [Blog: Designing Platform Contracts with CRDs](./docs/blog/01-designing-platform-contracts-with-crds.md)
 

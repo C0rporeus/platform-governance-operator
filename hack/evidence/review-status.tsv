@@ -1,0 +1,27 @@
+S-01	Read in full (lossless)	2026-10-28	Added BP-ADM-16 to BP-ADM-20, BP-OPS-06
+S-02	Outline reviewed; full read pending	-	Pending: Parameter resources, Failure Policy, Type checking, exempt API kinds
+S-03	Outline reviewed; earlier read via summariser; lossless re-read pending	-	-
+S-04	Outline reviewed; earlier read via summariser; lossless re-read pending	-	-
+S-05	Narrative sections read in full; control tables pending lossless re-read	2026-10-28	Added BP-PSS-09, BP-PSS-11, BP-PSS-12
+S-06	Read in full (lossless)	2026-10-28	Added BP-PSS-08, BP-PSS-10
+S-07	Outline reviewed; hostNetwork, existing-connections and pod-lifecycle sections pending	-	Pending
+S-08	Not yet reviewed in full	-	Pending (62,749 chars)
+S-09	Not yet reviewed in full	-	Pending
+S-10	Not yet reviewed in full	-	Pending (90,328 chars)
+S-11	Not yet reviewed in full	-	Pending (126,661 chars)
+S-12	Read via summariser (check list); lossless re-read pending	-	-
+S-13a	Index; link list extracted	2026-10-28	-
+S-13b	Read in full (lossless)	2026-10-28	Build L0-L3 unchanged from v1.0
+S-13c	Not yet reviewed in full	-	Pending (12,406 chars)
+S-13d	Basics section read in full; requirements pending	2026-10-28	Source Track L1-L4 identified
+S-13e	Not yet reviewed in full	-	Pending
+S-13f	Not yet reviewed in full	-	Pending
+S-13g	Read in full (lossless)	2026-10-28	v1.2 adds the Source Track
+S-13h	Superseded (v1.0, retired); kept for comparison	2026-10-28	-
+S-14	Text extracted; not yet reviewed	-	Pending (378,115 chars, no heading structure)
+S-15	Not yet reviewed in full	-	Pending (39,448 chars)
+S-17	Read in full (page is short)	2026-10-28	-
+S-18	Read in full (page is short)	2026-10-28	-
+S-19	Read in full (page is short)	2026-10-28	-
+S-20	Read in full (page is short)	2026-10-28	-
+S-21	Not yet reviewed in full	-	Pending (31,079 chars)

@@ -4,7 +4,7 @@ Date: 2026-11-02
 
 ## Status
 
-Proposed (pending the author's decision on the new `create pods` permission; see PLAN-003 section 5)
+Accepted on 2026-11-02, on one condition set by the author: adopting it must not break the adoption or the compliance flow. The conditions below turn that into testable requirements.
 
 ## Context
 
@@ -22,6 +22,16 @@ Add an opt-in fidelity mode, `--early-validation-fidelity=template|dry-run` (def
 
 - Denials from this operator's own webhooks reject in `enforce` mode. Verdicts of third parties (policy engines, quotas, Pod Security Admission) are forwarded as warnings, never as rejections.
 - A deadline shorter than the webhook timeout; on expiry or error the early check falls back to `template` mode and the webhook still fails open.
+
+### Conditions: adoption and compliance must not break
+
+1. **Opt-in at two levels.** The default install keeps today's privileges and behavior. The permission and its safeguard ship in a separate overlay (`config/dry-run`), and the flag only works when that overlay is installed.
+2. **Never stricter than `template`.** The synthetic Pod can only add information; it cannot turn an accepted workload into a rejected one except for a violation of this operator's own baselines in `enforce` mode, which Pod admission would reject anyway. In `warn` mode (the adoption mode) nothing is ever rejected.
+3. **Third parties never block.** Verdicts of other webhooks, quotas and Pod Security Admission are forwarded as warnings only.
+4. **Fails open and falls back.** Deadline, API error, missing safeguard or a webhook that does not support dry runs (`sideEffects` Unknown/Some) all fall back to the `template` result, which is always computed first.
+5. **No double reporting.** A message that the template evaluation already produced is not repeated; the dry run only contributes what mutation by others added.
+6. **No side effects.** A dry run writes no events (already guaranteed by `isDryRun` in every webhook), and the D3 rule (evaluate only when the Pod template changes) still applies, so existing violating workloads remain reconcilable.
+7. **Observable.** The operator logs which fidelity is active and why it fell back.
 
 ### Safeguards for the new permission
 

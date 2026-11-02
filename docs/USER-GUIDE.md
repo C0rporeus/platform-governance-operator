@@ -319,7 +319,7 @@ spec:
 kubectl apply --dry-run=server -f k8s/
 ```
 
-**Early feedback on Deployments and StatefulSets.** When you create a workload or change its Pod template, the operator evaluates the template with the same rules Pod admission will apply, and reports the result on `kubectl apply`:
+**Early feedback on Deployments, StatefulSets, DaemonSets, Jobs and CronJobs.** When you create a workload or change its Pod template, the operator evaluates the template with the same rules Pod admission will apply, and reports the result on `kubectl apply`:
 
 ```text
 Warning: [early] [RunAsNonRoot / ISO/IEC 27001 A.8.2] app container 'app' must run as non-root (policy: corporate)
@@ -441,7 +441,7 @@ The suite uses its own kubeconfig (`bin/e2e-kubeconfig`) and refuses to run agai
 
 ## 11. Known limitations
 
-- Only Pods are enforced. `Deployment` and `StatefulSet` get early feedback (warnings by default); `DaemonSet`, `Job` and `CronJob` do not yet, and are validated when their Pods are created.
+- Only Pods are enforced. `Deployment`, `StatefulSet`, `DaemonSet`, `Job` and `CronJob` get early feedback (warnings by default); Pods created by other controllers are validated when they are created.
 - Workloads that were already running when a policy was created are not re-evaluated; the early check only looks at template changes. A continuous audit of existing workloads is planned (`HU-02.5`).
 - Warnings are informational. To make them a change-control gate, fail your pipeline when `kubectl apply --dry-run=server` prints `Warning: [early]` (a ready-made script is planned, `TASK-02.6.9`).
 - Pods created by controllers outside Kubernetes (for example Argo Rollouts) get no early feedback; Pod admission validates them.

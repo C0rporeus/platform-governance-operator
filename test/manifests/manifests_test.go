@@ -204,7 +204,12 @@ func TestEarlyValidationIsOnlyCalledWhenThePodTemplateChanges(t *testing.T) {
 		t.Fatalf("expected one match condition, got %d", len(conditions))
 	}
 	expression, _ := conditions[0].(object)["expression"].(string)
-	for _, want := range []string{"request.operation == 'CREATE'", "object.spec.template != oldObject.spec.template"} {
+	for _, want := range []string{
+		"request.operation == 'CREATE'",
+		"object.spec.template != oldObject.spec.template",
+		"request.kind.kind == 'CronJob'",
+		"object.spec.jobTemplate.spec.template != oldObject.spec.jobTemplate.spec.template",
+	} {
 		if !strings.Contains(expression, want) {
 			t.Errorf("match condition %q does not contain %q", expression, want)
 		}

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
@@ -30,6 +31,10 @@ const (
 	appsGroup       = "apps"
 	kindDeployment  = "Deployment"
 	kindStatefulSet = "StatefulSet"
+	kindDaemonSet   = "DaemonSet"
+	kindJob         = "Job"
+	kindCronJob     = "CronJob"
+	batchGroup      = "batch"
 	kindReplicaSet  = "ReplicaSet"
 	kindPod         = "Pod"
 	podTemplateHash = "pod-template-hash"
@@ -77,6 +82,34 @@ func SubjectForStatefulSet(s *appsv1.StatefulSet) Subject {
 	return Subject{
 		Refs:   []corev1alpha1.PolicyTargetReference{{Group: appsGroup, Kind: kindStatefulSet, Name: s.Name}},
 		Labels: s.Spec.Template.Labels,
+	}
+}
+
+// SubjectForDaemonSet builds the Subject for a DaemonSet, which owns its Pods directly.
+func SubjectForDaemonSet(d *appsv1.DaemonSet) Subject {
+	return Subject{
+		Refs:   []corev1alpha1.PolicyTargetReference{{Group: appsGroup, Kind: kindDaemonSet, Name: d.Name}},
+		Labels: d.Spec.Template.Labels,
+	}
+}
+
+// SubjectForJob builds the Subject for a Job, which owns its Pods directly.
+func SubjectForJob(j *batchv1.Job) Subject {
+	return Subject{
+		Refs:   []corev1alpha1.PolicyTargetReference{{Group: batchGroup, Kind: kindJob, Name: j.Name}},
+		Labels: j.Spec.Template.Labels,
+	}
+}
+
+// SubjectForCronJob builds the Subject for a CronJob. Its Pods are owned by the Jobs it
+// creates, whose names are not known in advance, so a targetRef cannot select them and
+// the CRD rejects a CronJob targetRef; the reference is kept so the Subject describes the
+// workload honestly. Baselines without targetRef, and selectors on the Pod template
+// labels, apply as for any other workload.
+func SubjectForCronJob(c *batchv1.CronJob) Subject {
+	return Subject{
+		Refs:   []corev1alpha1.PolicyTargetReference{{Group: batchGroup, Kind: kindCronJob, Name: c.Name}},
+		Labels: c.Spec.JobTemplate.Spec.Template.Labels,
 	}
 }
 

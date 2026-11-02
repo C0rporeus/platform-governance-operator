@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -181,5 +182,46 @@ func TestSubjectForStatefulSetMatchesItsPods(t *testing.T) {
 	}
 	if got.Labels["app"] != "db" {
 		t.Fatalf("labels = %v, want the pod template labels", got.Labels)
+	}
+}
+
+func TestSubjectsForOtherWorkloadKinds(t *testing.T) {
+	labels := map[string]string{"app": "x"}
+	template := corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels}}
+
+	daemon := SubjectForDaemonSet(&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "agent"}, Spec: appsv1.DaemonSetSpec{Template: template}})
+	job := SubjectForJob(&batchv1.Job{ObjectMeta: metav1.ObjectMeta{Name: "migrate"}, Spec: batchv1.JobSpec{Template: template}})
+	cron := SubjectForCronJob(&batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: "nightly"},
+		Spec:       batchv1.CronJobSpec{JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{Template: template}}},
+	})
+
+	cases := []struct {
+		name string
+		got  Subject
+		want corev1alpha1.PolicyTargetReference
+	}{
+		{"DaemonSet", daemon, corev1alpha1.PolicyTargetReference{Group: "apps", Kind: "DaemonSet", Name: "agent"}},
+		{"Job", job, corev1alpha1.PolicyTargetReference{Group: "batch", Kind: "Job", Name: "migrate"}},
+		{"CronJob", cron, corev1alpha1.PolicyTargetReference{Group: "batch", Kind: "CronJob", Name: "nightly"}},
+	}
+	for _, c := range cases {
+		if len(c.got.Refs) != 1 || c.got.Refs[0] != c.want {
+			t.Errorf("%s: refs = %+v, want [%+v]", c.name, c.got.Refs, c.want)
+		}
+		if c.got.Labels["app"] != "x" {
+			t.Errorf("%s: labels = %v, want the Pod template labels", c.name, c.got.Labels)
+		}
+	}
+
+	// A Pod owned directly by the DaemonSet or the Job carries the reference the template subject uses.
+	for _, c := range cases[:2] {
+		pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+			Name:            "p",
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: c.want.Group + "/v1", Kind: c.want.Kind, Name: c.want.Name}},
+		}}
+		if !slices.Contains(SubjectForPod(pod).Refs, c.want) {
+			t.Errorf("%s: the Pod subject does not carry the ref the template subject uses", c.name)
+		}
 	}
 }

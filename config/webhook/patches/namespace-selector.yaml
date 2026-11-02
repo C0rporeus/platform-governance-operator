@@ -47,7 +47,7 @@ webhooks:
       - cert-manager
       - platform-governance-operator-system
 - name: vworkload.kb.io
-  # Early validation of Deployments and StatefulSets (ADR-0003: fails open). Same
+  # Early validation of Deployments, StatefulSets, DaemonSets, Jobs and CronJobs (ADR-0003: fails open). Same
   # namespace exclusions as the Pod webhooks, so the operator's own workloads and
   # cert-manager are never held up by it.
   namespaceSelector:
@@ -65,4 +65,8 @@ webhooks:
   # status of workloads that already violate a policy; none of that reaches the webhook.
   matchConditions:
   - name: pod-template-changed
-    expression: "request.operation == 'CREATE' || object.spec.template != oldObject.spec.template"
+    expression: >-
+      request.operation == 'CREATE' ||
+      (request.kind.kind == 'CronJob'
+        ? object.spec.jobTemplate.spec.template != oldObject.spec.jobTemplate.spec.template
+        : object.spec.template != oldObject.spec.template)

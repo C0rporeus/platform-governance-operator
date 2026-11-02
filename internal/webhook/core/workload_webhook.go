@@ -11,6 +11,7 @@ import (
 
 	admissionv1 "k8s.io/api/admission/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -58,7 +59,7 @@ const (
 	auditAnnotationPolicies   = "policies"
 )
 
-// WorkloadValidator gives early feedback on Deployments and StatefulSets: it
+// WorkloadValidator gives early feedback on Deployments, StatefulSets, DaemonSets, Jobs and CronJobs: it
 // evaluates the Pod template with the same rules Pod admission applies to the Pods
 // it will create, so a violation shows up on `kubectl apply` instead of as a
 // ReplicaSet that cannot create Pods.
@@ -80,7 +81,7 @@ func (v *WorkloadValidator) InjectDecoder(d admission.Decoder) error {
 	return nil
 }
 
-// +kubebuilder:webhook:path=/validate-apps-v1-workload,mutating=false,failurePolicy=ignore,sideEffects=None,timeoutSeconds=3,matchPolicy=Equivalent,groups=apps,resources=deployments;statefulsets,verbs=create;update,versions=v1,name=vworkload.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-apps-v1-workload,mutating=false,failurePolicy=ignore,sideEffects=None,timeoutSeconds=3,matchPolicy=Equivalent,groups=apps;batch,resources=deployments;statefulsets;daemonsets;jobs;cronjobs,verbs=create;update,versions=v1,name=vworkload.kb.io,admissionReviewVersions=v1
 
 // template is what the early check needs from a workload.
 type template struct {
@@ -100,7 +101,7 @@ func (v *WorkloadValidator) Handle(ctx context.Context, req admission.Request) a
 		return admission.Allowed("early validation does not apply")
 	}
 
-	current, err := v.decode(req.Kind.Kind, req.Object.Raw, req.Namespace)
+	current, err := v.decode(req.Kind.Kind, req.Object.Raw)
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
@@ -112,7 +113,7 @@ func (v *WorkloadValidator) Handle(ctx context.Context, req admission.Request) a
 	// Deployment controller keeps updating annotations and replicas of workloads that
 	// already violate a policy; evaluating those would make them impossible to reconcile.
 	if req.Operation == admissionv1.Update {
-		previous, err := v.decode(req.Kind.Kind, req.OldObject.Raw, req.Namespace)
+		previous, err := v.decode(req.Kind.Kind, req.OldObject.Raw)
 		if err != nil {
 			return admission.Errored(http.StatusBadRequest, err)
 		}
@@ -183,25 +184,40 @@ func (v *WorkloadValidator) respond(current template, req admission.Request, out
 	return response
 }
 
-// decode reads a Deployment or StatefulSet and extracts what the early check needs.
-func (v *WorkloadValidator) decode(kind string, raw []byte, namespace string) (template, error) {
+// decode reads a workload and extracts the Pod template and the Subject policies are matched against.
+func (v *WorkloadValidator) decode(kind string, raw []byte) (template, error) {
+	rawObject := runtime.RawExtension{Raw: raw}
 	switch kind {
 	case "Deployment":
 		d := &appsv1.Deployment{}
-		if err := v.decoder.DecodeRaw(runtime.RawExtension{Raw: raw}, d); err != nil {
+		if err := v.decoder.DecodeRaw(rawObject, d); err != nil {
 			return template{}, err
 		}
-		d.Namespace = namespaceOr(d.Namespace, namespace)
-		return template{kind: kind, name: d.Name, pod: d.Spec.Template,
-			subject: policy.SubjectForDeployment(d), deleted: isDeleting(d.ObjectMeta)}, nil
+		return template{kind: kind, name: d.Name, pod: d.Spec.Template, subject: policy.SubjectForDeployment(d), deleted: isDeleting(d.ObjectMeta)}, nil
 	case "StatefulSet":
 		s := &appsv1.StatefulSet{}
-		if err := v.decoder.DecodeRaw(runtime.RawExtension{Raw: raw}, s); err != nil {
+		if err := v.decoder.DecodeRaw(rawObject, s); err != nil {
 			return template{}, err
 		}
-		s.Namespace = namespaceOr(s.Namespace, namespace)
-		return template{kind: kind, name: s.Name, pod: s.Spec.Template,
-			subject: policy.SubjectForStatefulSet(s), deleted: isDeleting(s.ObjectMeta)}, nil
+		return template{kind: kind, name: s.Name, pod: s.Spec.Template, subject: policy.SubjectForStatefulSet(s), deleted: isDeleting(s.ObjectMeta)}, nil
+	case "DaemonSet":
+		d := &appsv1.DaemonSet{}
+		if err := v.decoder.DecodeRaw(rawObject, d); err != nil {
+			return template{}, err
+		}
+		return template{kind: kind, name: d.Name, pod: d.Spec.Template, subject: policy.SubjectForDaemonSet(d), deleted: isDeleting(d.ObjectMeta)}, nil
+	case "Job":
+		j := &batchv1.Job{}
+		if err := v.decoder.DecodeRaw(rawObject, j); err != nil {
+			return template{}, err
+		}
+		return template{kind: kind, name: j.Name, pod: j.Spec.Template, subject: policy.SubjectForJob(j), deleted: isDeleting(j.ObjectMeta)}, nil
+	case "CronJob":
+		c := &batchv1.CronJob{}
+		if err := v.decoder.DecodeRaw(rawObject, c); err != nil {
+			return template{}, err
+		}
+		return template{kind: kind, name: c.Name, pod: c.Spec.JobTemplate.Spec.Template, subject: policy.SubjectForCronJob(c), deleted: isDeleting(c.ObjectMeta)}, nil
 	default:
 		return template{}, fmt.Errorf("early validation does not handle kind %q", kind)
 	}
@@ -221,13 +237,6 @@ func podFromTemplate(tpl corev1.PodTemplateSpec, namespace string) *corev1.Pod {
 }
 
 func isDeleting(meta metav1.ObjectMeta) bool { return meta.DeletionTimestamp != nil }
-
-func namespaceOr(value, fallback string) string {
-	if value != "" {
-		return value
-	}
-	return fallback
-}
 
 // auditAnnotations records which rules and policies matched in the API server audit
 // log (the API server prefixes the keys with the webhook name).

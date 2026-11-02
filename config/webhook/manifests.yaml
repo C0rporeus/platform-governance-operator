@@ -190,6 +190,7 @@ webhooks:
   rules:
   - apiGroups:
     - apps
+    - batch
     apiVersions:
     - v1
     operations:
@@ -198,6 +199,9 @@ webhooks:
     resources:
     - deployments
     - statefulsets
+    - daemonsets
+    - jobs
+    - cronjobs
   sideEffects: None
   timeoutSeconds: 3
 - admissionReviewVersions:

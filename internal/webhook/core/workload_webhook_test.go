@@ -29,6 +29,7 @@ import (
 
 	admissionv1 "k8s.io/api/admission/v1"
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -432,8 +433,8 @@ func TestWorkloadValidatorFailsOpenWhenPoliciesCannotBeRead(t *testing.T) {
 func TestWorkloadValidatorRejectsUnsupportedKinds(t *testing.T) {
 	t.Parallel()
 	v := newWorkloadValidator(t, EarlyValidationWarn, record.NewFakeRecorder(10))
-	resp := v.Handle(context.Background(), workloadRequest(t, admissionv1.Create, "DaemonSet",
-		&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "x"}}, workloadRequestOpts{}))
+	resp := v.Handle(context.Background(), workloadRequest(t, admissionv1.Create, "ReplicaSet",
+		&appsv1.ReplicaSet{ObjectMeta: metav1.ObjectMeta{Name: "x"}}, workloadRequestOpts{}))
 	if resp.Allowed {
 		t.Fatal("a kind the webhook is not registered for must be reported, not silently admitted")
 	}
@@ -561,5 +562,119 @@ func TestEarlyValidationAndPodAdmissionAgree(t *testing.T) {
 				t.Fatal("a denial without violations means the comparison is not exercising anything")
 			}
 		})
+	}
+}
+
+func daemonSetOf(name string, spec corev1.PodSpec) *appsv1.DaemonSet {
+	labels := map[string]string{"app": name}
+	return &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
+		Spec: appsv1.DaemonSetSpec{
+			Selector: &metav1.LabelSelector{MatchLabels: labels},
+			Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: labels}, Spec: spec},
+		},
+	}
+}
+
+func jobOf(name string, spec corev1.PodSpec) *batchv1.Job {
+	return &batchv1.Job{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
+		Spec:       batchv1.JobSpec{Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": name}}, Spec: spec}},
+	}
+}
+
+func cronJobOf(name string, spec corev1.PodSpec) *batchv1.CronJob {
+	return &batchv1.CronJob{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: testNamespace},
+		Spec: batchv1.CronJobSpec{
+			Schedule: "0 * * * *",
+			JobTemplate: batchv1.JobTemplateSpec{Spec: batchv1.JobSpec{
+				Template: corev1.PodTemplateSpec{ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": name}}, Spec: spec},
+			}},
+		},
+	}
+}
+
+// Every kind that creates Pods gets the same early feedback as a Deployment.
+func TestWorkloadValidatorCoversDaemonSetsJobsAndCronJobs(t *testing.T) {
+	t.Parallel()
+	violating := violatingPod().Spec
+	compliant := corev1.PodSpec{
+		SecurityContext: &corev1.PodSecurityContext{RunAsNonRoot: ptr.To(true)},
+		Containers:      []corev1.Container{{Name: "app", Image: "nginx:1"}},
+	}
+	builders := map[string]func(string, corev1.PodSpec) any{
+		"DaemonSet": func(n string, s corev1.PodSpec) any { return daemonSetOf(n, s) },
+		"Job":       func(n string, s corev1.PodSpec) any { return jobOf(n, s) },
+		"CronJob":   func(n string, s corev1.PodSpec) any { return cronJobOf(n, s) },
+	}
+	for kind, build := range builders {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			v := newWorkloadValidator(t, EarlyValidationEnforce, record.NewFakeRecorder(10), rootBaseline())
+			ctx := context.Background()
+
+			denied := v.Handle(ctx, workloadRequest(t, admissionv1.Create, kind, build("w", violating), workloadRequestOpts{}))
+			if denied.Allowed || !strings.Contains(denied.Result.Message, kind+" team-a/w") {
+				t.Fatalf("a violating %s must be rejected naming it, got %+v", kind, denied)
+			}
+			admitted := v.Handle(ctx, workloadRequest(t, admissionv1.Create, kind, build("w", compliant), workloadRequestOpts{}))
+			if !admitted.Allowed || len(admitted.Warnings) != 0 {
+				t.Fatalf("a compliant %s must be admitted quietly, got %+v", kind, admitted)
+			}
+		})
+	}
+}
+
+func TestWorkloadValidatorOnlyEvaluatesCronJobsWhenTheirJobTemplateChanges(t *testing.T) {
+	t.Parallel()
+	v := newWorkloadValidator(t, EarlyValidationEnforce, record.NewFakeRecorder(10), rootBaseline())
+	ctx := context.Background()
+	legacy := cronJobOf("nightly", violatingPod().Spec)
+
+	suspended := legacy.DeepCopy()
+	suspended.Spec.Suspend = ptr.To(true)
+	suspended.Spec.Schedule = "30 2 * * *"
+	resp := v.Handle(ctx, workloadRequest(t, admissionv1.Update, "CronJob", suspended, workloadRequestOpts{old: legacy}))
+	if !resp.Allowed {
+		t.Fatalf("changing the schedule or suspending must stay possible on a violating CronJob, got %+v", resp)
+	}
+
+	changed := legacy.DeepCopy()
+	changed.Spec.JobTemplate.Spec.Template.Spec.Containers[0].Image = "nginx:2"
+	resp = v.Handle(ctx, workloadRequest(t, admissionv1.Update, "CronJob", changed, workloadRequestOpts{old: legacy}))
+	if resp.Allowed {
+		t.Fatal("a change inside the job template must be evaluated")
+	}
+}
+
+func TestWorkloadValidatorMatchesTargetingForDaemonSetsAndJobs(t *testing.T) {
+	t.Parallel()
+	targeted := func(group, kind, name string) *platformv1alpha1.SecurityBaseline {
+		b := rootBaseline()
+		b.Name = strings.ToLower(kind) + "-" + name
+		b.Spec.TargetRef = &platformv1alpha1.PolicyTargetReference{Group: group, Kind: kind, Name: name}
+		return b
+	}
+	v := newWorkloadValidator(t, EarlyValidationEnforce, record.NewFakeRecorder(10),
+		targeted("apps", "DaemonSet", "agent"), targeted("batch", "Job", "migrate"))
+	ctx := context.Background()
+	spec := violatingPod().Spec
+
+	for _, c := range []struct {
+		name     string
+		kind     string
+		obj      any
+		wantDeny bool
+	}{
+		{"targeted DaemonSet", "DaemonSet", daemonSetOf("agent", spec), true},
+		{"another DaemonSet", "DaemonSet", daemonSetOf("other", spec), false},
+		{"targeted Job", "Job", jobOf("migrate", spec), true},
+		{"another Job", "Job", jobOf("cleanup", spec), false},
+	} {
+		resp := v.Handle(ctx, workloadRequest(t, admissionv1.Create, c.kind, c.obj, workloadRequestOpts{}))
+		if resp.Allowed == c.wantDeny {
+			t.Errorf("%s: allowed = %v, want denied = %v", c.name, resp.Allowed, c.wantDeny)
+		}
 	}
 }

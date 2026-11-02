@@ -1,6 +1,9 @@
 version: "2"
 run:
   allow-parallel-runners: true
+  # Lint the e2e suite too; it is excluded from `go build ./...` by its build tag.
+  build-tags:
+    - e2e
 linters:
   default: none
   enable:

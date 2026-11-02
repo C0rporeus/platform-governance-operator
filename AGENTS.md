@@ -315,6 +315,23 @@ Every policy kind embeds `PolicyTargeting` (`targetRef` | `selector`; neither = 
 - **Invalid selectors** are rejected by the CRD validating webhooks (`ValidateTargeting`); if one still reaches admission (webhooks disabled) it is logged and skipped.
 - The `spec.policyScope` field index is registered but admission currently lists from the namespace-scoped informer cache and filters in memory; use the index if lists ever become large.
 
+## CRD validation rules (CEL) and size limits
+
+The API server enforces these on every write (minimum Kubernetes 1.30; CRD validation ratcheting means a stored object is only re-checked on the fields an update changes). They live in the type markers, not in webhooks; the CRD webhooks keep only what CEL cannot express (structural validity of a `LabelSelector`, quantity format).
+
+| Type | Rule |
+|---|---|
+| `HorizontalScalingPolicy` | `maxReplicas >= minReplicas` (defaults 2 and 10 are applied before the rule runs) |
+| `PolicyTargetReference` | the kind must belong to a *known* group: core is `Pod`/`ReplicationController`, `apps` is `Deployment`/`StatefulSet`/`DaemonSet`/`ReplicaSet`, `batch` is `Job`; other groups (for example `argoproj.io`) are free. `CronJob` is rejected on purpose: it owns Jobs, not Pods, so it could never match (see `internal/policy/subject.go`). A kind without its group (`Deployment` with no `apps`) is rejected because matching is exact on group and it would silently never match |
+| `WorkloadPolicySpec` | `horizontalScaling` requires `targetRef.kind == Deployment` when a `targetRef` is set (the HPA reconciler only manages Deployments); `defaultRequests[r] <= defaultLimits[r]` for every resource in both (uses the CEL `quantity` library; values that are not valid quantities are skipped and left to the webhook) |
+
+Size limits (D6, so rule cost stays bounded): `defaultRequests`/`defaultLimits` at most 16 entries with values of at most 64 characters (`QuantityString`); `mandatoryLabels` at most 32 entries with values of at most 63 (`LabelValueString`); `allowedRegistries` 64 items of at most 255; `excludedNamespaces` 256 items of at most 63; `allowedCapabilities` 64 items of at most 40.
+
+Gotchas:
+- controller-gen cannot bound the values of a `map[string]string` with `items:`; the bound goes on a named string type, which is why those maps are `map[string]QuantityString` / `map[string]LabelValueString` (convert with `string(v)`).
+- Never write an empty-string literal (`''`) inside an `XValidation` rule: the generator turns it into a typographic quote and the CRD becomes invalid. Use `size(x) == 0`.
+- Tests: `test/integration/cel_validation_test.go` (envtest, no webhooks). Each rule was verified by neutralising it and watching its specs fail.
+
 ## Cluster-wide Baselines (`ClusterSecurityBaseline`)
 
 - Cluster-scoped CRD; its spec embeds `SecurityBaselineSpec` (all rules, `enforcementAction`, `excludedNamespaces`) and adds `namespaceSelector`. `targetRef` is rejected (CEL on the CRD + validating webhook); the inherited `selector` matches Pod labels.

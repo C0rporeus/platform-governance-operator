@@ -406,7 +406,7 @@ kubectl delete hpa -A -l core.platform.f3nr1r.io/managed-hpa=true
 | A Deployment rollout makes no progress | Its Pods are denied. | `kubectl describe rs -n <ns>` and `kubectl get events -n <ns> --field-selector reason=PodDenied`. |
 | A new policy has no effect for a few seconds | The webhook reads policies from an informer cache. | Retry. Policies propagate within seconds. |
 | A `targetRef` to a Deployment does not match | The Pod's ReplicaSet name does not end with its `pod-template-hash` label (a custom controller). | Use a `selector` on Pod labels instead. |
-| A policy is rejected at creation | Invalid `selector`, or a `targetRef` without `kind`/`name`; `ClusterSecurityBaseline` does not accept `targetRef`. | Read the validation message; fix the field it names. |
+| A policy is rejected at creation | Invalid `selector`; a `targetRef` without `kind`/`name`, or whose `kind` does not belong to its `group` (`Deployment` needs `group: apps`; `CronJob` is not accepted because it owns Jobs, not Pods); `maxReplicas` below `minReplicas`; `horizontalScaling` on a `targetRef` that is not a Deployment; `defaultRequests` above `defaultLimits`; a list or map over its size limit; `ClusterSecurityBaseline` does not accept `targetRef`. | Read the validation message; fix the field it names. These checks run on `kubectl apply` (Kubernetes 1.30+). |
 | No HPA is created | `horizontalScaling` is missing, `enabledByDefault: false` without the opt-in annotation, or a more specific policy without `horizontalScaling` governs the Deployment. | `kubectl get workloadpolicy -n <ns> -o yaml`; check the Deployment annotations. |
 
 ---

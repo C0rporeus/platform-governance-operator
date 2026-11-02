@@ -35,7 +35,7 @@ type TelemetryProfileReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=telemetryprofiles,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=telemetryprofiles,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=telemetryprofiles/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=telemetryprofiles/finalizers,verbs=update
 

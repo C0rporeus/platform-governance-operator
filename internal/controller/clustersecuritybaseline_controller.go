@@ -35,7 +35,7 @@ type ClusterSecurityBaselineReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=clustersecuritybaselines,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=clustersecuritybaselines,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=clustersecuritybaselines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=clustersecuritybaselines/finalizers,verbs=update
 // +kubebuilder:rbac:groups="",resources=namespaces,verbs=get;list;watch

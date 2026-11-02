@@ -54,7 +54,7 @@ type WorkloadPolicyReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=workloadpolicies,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=workloadpolicies,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=workloadpolicies/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=workloadpolicies/finalizers,verbs=update
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch

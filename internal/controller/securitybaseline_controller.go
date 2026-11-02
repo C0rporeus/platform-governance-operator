@@ -35,7 +35,7 @@ type SecurityBaselineReconciler struct {
 	Recorder record.EventRecorder
 }
 
-// +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=get;list;watch
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=securitybaselines/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=securitybaselines/finalizers,verbs=update
 

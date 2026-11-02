@@ -49,6 +49,7 @@ config/
   samples/                          Example CRs — edit freely
   default/                          Kustomization entry point
 docs/adrs/                          Architecture Decision Records
+docs/GOOD-PRACTICES-EVIDENCE.md       Evidence document: sources, practices, design decisions, deviations, traceability (update when a decision changes)
 test/
   integration/                      envtest-based integration tests (included in make test)
     suite_test.go                   envtest bootstrap (shared k8sClient, ctx)
@@ -277,6 +278,23 @@ var _ = Describe("FooController", func() {
 - `internal/webhook/v1alpha1/webhook_suite_test.go` — webhook suite setup
 - CRDs loaded from `config/crd/bases/` by envtest (requires `make manifests` first)
 - Black-box tests import the controller package: `controller.WorkloadPolicyReconciler{...}`
+
+## Development rule
+
+**A defect found is fixed in the same change, not deferred.** Fix it with a regression test that fails without the fix, run `make test` and `make lint`, then record it as done. Defer only when the fix needs a decision or input that is not available, and say what blocks it.
+
+## Pod admission semantics
+
+- **Validator** (`vpod.kb.io`, `create;update`): evaluates on create. On update it allows requests that change only fields Pod Security admission exempts (metadata other than the seccomp/AppArmor annotations, `activeDeadlineSeconds`, `tolerations`), so a running Pod that violates a newer baseline can still be relabelled. Any other change (for example an image) is evaluated in full.
+- **Mutator** (`mpod.kb.io`, `create` only): defaults apply at creation. The spec of a running Pod is immutable, so a patch on update would be rejected by the API server.
+- **Mirror Pods** of static Pods are skipped only when the request carries the `kubernetes.io/config.mirror` annotation **and** a node identity (`system:node:*` user in group `system:nodes`). The annotation alone is user-settable and would bypass every baseline.
+- **Windows Pods** (`spec.os.name: windows`) skip the Linux-only rules: privilege escalation, seccomp, capabilities and read-only root filesystem. `runAsNonRoot` still applies.
+- **Dry-run** requests record no events (`sideEffects: None`).
+- Each violation prints an ISO/IEC 27001 control: `A.8.2` (privileged access rights) for non-root, privilege, capabilities and seccomp; `A.8.9` (configuration management) for read-only root filesystem, host namespaces and `hostPath`; `A.5.21` (ICT supply chain) for image rules. Titles come from a secondary summary of the standard and the mapping awaits confirmation by the ISMS owner (see `docs/GOOD-PRACTICES-EVIDENCE.md`).
+
+## Availability invariants
+
+`test/manifests` fails if any of these regress: every webhook has `timeoutSeconds` between 1 and 10; the Pod webhooks exclude `kube-system`, `kube-public`, `kube-node-lease`, `cert-manager` and the operator namespace by the immutable `kubernetes.io/metadata.name` label, and that namespace equals `namespace:` in `config/default/kustomization.yaml`; the manager runs at least 2 replicas with anti-affinity and a PodDisruptionBudget; the memory limit equals the request.
 
 ## Policy Targeting
 

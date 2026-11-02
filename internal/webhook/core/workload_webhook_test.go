@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -329,22 +330,82 @@ func TestWorkloadValidatorRecordsEventsExceptOnDryRun(t *testing.T) {
 	})
 }
 
-func TestWorkloadValidatorCapsTheNumberOfWarnings(t *testing.T) {
-	t.Parallel()
+func manyContainers(n int) corev1.PodSpec {
 	spec := corev1.PodSpec{}
-	for i := range 25 {
+	for i := range n {
 		spec.Containers = append(spec.Containers, corev1.Container{Name: fmt.Sprintf("c%d", i), Image: "nginx:1"})
 	}
+	return spec
+}
+
+// One mistake repeated in many containers is one warning, not one per container.
+func TestWorkloadValidatorGroupsTheSameViolationAcrossContainers(t *testing.T) {
+	t.Parallel()
 	v := newWorkloadValidator(t, EarlyValidationWarn, record.NewFakeRecorder(100), rootBaseline())
 
 	resp := v.Handle(context.Background(),
-		workloadRequest(t, admissionv1.Create, "Deployment", deploymentOf("big", spec), workloadRequestOpts{}))
+		workloadRequest(t, admissionv1.Create, "Deployment", deploymentOf("big", manyContainers(25)), workloadRequestOpts{}))
 
-	if len(resp.Warnings) != maxEarlyWarnings+1 {
-		t.Fatalf("got %d warnings, want %d plus a summary", len(resp.Warnings), maxEarlyWarnings)
+	if len(resp.Warnings) != 1 {
+		t.Fatalf("25 containers breaking one rule must produce one warning, got %d: %v", len(resp.Warnings), resp.Warnings)
 	}
-	if last := resp.Warnings[len(resp.Warnings)-1]; !strings.Contains(last, "and 5 more violations") {
-		t.Fatalf("the last warning must summarise the rest, got %q", last)
+	warning := resp.Warnings[0]
+	for _, want := range []string{"[early]", "RunAsNonRoot", "25 violations", "c0, c1, c2 and 22 more", "policy: strict"} {
+		if !strings.Contains(warning, want) {
+			t.Errorf("warning %q does not contain %q", warning, want)
+		}
+	}
+}
+
+// The API server accepts 4096 characters of warnings, then truncates each to 256 and
+// drops the rest. The report must stay inside that, with every line under 256.
+func TestWorkloadValidatorWarningsFitTheAPIServerBudget(t *testing.T) {
+	t.Parallel()
+	baselines := make([]client.Object, 0, 60)
+	for i := range 60 {
+		b := rootBaseline()
+		b.Name = fmt.Sprintf("policy-with-a-fairly-long-descriptive-name-%02d", i)
+		baselines = append(baselines, b)
+	}
+	v := newWorkloadValidator(t, EarlyValidationWarn, record.NewFakeRecorder(500), baselines...)
+
+	resp := v.Handle(context.Background(),
+		workloadRequest(t, admissionv1.Create, "Deployment", deploymentOf("web", violatingPod().Spec), workloadRequestOpts{}))
+
+	total := 0
+	for _, w := range resp.Warnings {
+		runes := utf8.RuneCountInString(w)
+		if runes > 255 {
+			t.Errorf("a warning of %d characters would be truncated by the API server: %q", runes, w)
+		}
+		total += runes
+	}
+	if total > 4096 {
+		t.Fatalf("warnings total %d characters; the API server drops everything past 4096", total)
+	}
+	last := resp.Warnings[len(resp.Warnings)-1]
+	if !strings.Contains(last, "more kinds of violation") {
+		t.Fatalf("when warnings are left out the last line must say so, got %q", last)
+	}
+	if len(resp.Warnings) < 10 {
+		t.Fatalf("the budget should fit many groups before summarising, got %d lines", len(resp.Warnings))
+	}
+}
+
+func TestEventsDescribeTheWholeGroupWithoutTheWarningLimit(t *testing.T) {
+	t.Parallel()
+	recorder := record.NewFakeRecorder(100)
+	v := newWorkloadValidator(t, EarlyValidationWarn, recorder, rootBaseline())
+
+	v.Handle(context.Background(),
+		workloadRequest(t, admissionv1.Create, "Deployment", deploymentOf("big", manyContainers(8)), workloadRequestOpts{}))
+
+	if len(recorder.Events) != 1 {
+		t.Fatalf("one group must be one event, got %d", len(recorder.Events))
+	}
+	event := <-recorder.Events
+	if !strings.Contains(event, "c0, c1, c2, c3, c4, c5, c6, c7") {
+		t.Fatalf("the event must name every container, got %q", event)
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
+	platformv1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
 	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
@@ -52,9 +53,6 @@ func ParseEarlyValidationMode(value string) (EarlyValidationMode, error) {
 const (
 	// earlyPrefix tells the user a message comes from the early check, not from Pod admission.
 	earlyPrefix = "[early]"
-	// maxEarlyWarnings caps the warnings returned to the client: the API server drops
-	// warning headers beyond a few kilobytes, so a long list would be cut silently.
-	maxEarlyWarnings = 20
 
 	auditAnnotationViolations = "violations"
 	auditAnnotationPolicies   = "policies"
@@ -140,30 +138,35 @@ func (v *WorkloadValidator) Handle(ctx context.Context, req admission.Request) a
 func (v *WorkloadValidator) respond(current template, req admission.Request, outcome Outcome) admission.Response {
 	dryRun := isDryRun(req)
 	label := fmt.Sprintf("%s %s/%s", current.kind, req.Namespace, current.name)
-	var warnings, denials []string
 
-	for _, f := range outcome.Enforce {
-		msg := fmt.Sprintf("%s %s", earlyPrefix, f.Message())
-		if v.Mode == EarlyValidationEnforce {
+	// In enforce mode the Enforce violations reject; otherwise they are reported as
+	// warnings together with the violations of Warn baselines.
+	var denials []string
+	warned := slices.Clone(outcome.Warn)
+	if v.Mode == EarlyValidationEnforce {
+		for _, f := range outcome.Enforce {
 			denials = append(denials, f.Message())
-			recordEvent(v.Recorder, dryRun, f.Source, "Warning", "WorkloadDenied",
-				fmt.Sprintf("Denied %s: %s", label, f.Message()))
-			continue
 		}
-		warnings = append(warnings, msg)
-		recordEvent(v.Recorder, dryRun, f.Source, "Warning", "WorkloadViolationWarn",
-			fmt.Sprintf("%s would be denied at Pod admission: %s", label, f.Message()))
+		for _, g := range groupFindings(outcome.Enforce) {
+			recordEvent(v.Recorder, dryRun, g.source(), "Warning", "WorkloadDenied", g.eventMessage("Denied "+label))
+		}
+	} else {
+		warned = append(slices.Clone(outcome.Enforce), outcome.Warn...)
 	}
-	for _, f := range outcome.Warn {
-		warnings = append(warnings, fmt.Sprintf("%s %s", earlyPrefix, f.Message()))
-		recordEvent(v.Recorder, dryRun, f.Source, "Warning", "WorkloadViolationWarn",
-			fmt.Sprintf("Warning for %s: %s", label, f.Message()))
+
+	warnGroups := groupFindings(warned)
+	for _, g := range warnGroups {
+		text := "Warning for " + label
+		if g.finding.Action == platformv1alpha1.EnforcementActionEnforce {
+			text = label + " would be denied at Pod admission"
+		}
+		recordEvent(v.Recorder, dryRun, g.source(), "Warning", "WorkloadViolationWarn", g.eventMessage(text))
 	}
-	for _, f := range outcome.Audit {
-		workloadlog.Info("Audit violation detected", "policy", f.Policy, "kind", current.kind, "name", current.name,
-			"namespace", req.Namespace, "rule", f.Violation.Rule, "iso", f.Violation.ControlISO, "container", f.Violation.Container)
-		recordEvent(v.Recorder, dryRun, f.Source, "Warning", "WorkloadViolationAudit",
-			fmt.Sprintf("Audit violation on %s: %s", label, f.Message()))
+	for _, g := range groupFindings(outcome.Audit) {
+		workloadlog.Info("Audit violation detected", "policy", g.finding.Policy, "kind", current.kind, "name", current.name,
+			"namespace", req.Namespace, "rule", g.finding.Violation.Rule, "iso", g.finding.Violation.ControlISO,
+			"violations", g.count, "containers", strings.Join(g.containers, ","))
+		recordEvent(v.Recorder, dryRun, g.source(), "Warning", "WorkloadViolationAudit", g.eventMessage("Audit violation on "+label))
 	}
 
 	var response admission.Response
@@ -173,8 +176,8 @@ func (v *WorkloadValidator) respond(current template, req admission.Request, out
 	} else {
 		response = admission.Allowed("")
 	}
-	if len(warnings) > 0 {
-		response = response.WithWarnings(capWarnings(warnings)...)
+	if warnings := renderWarnings(warnGroups); len(warnings) > 0 {
+		response = response.WithWarnings(warnings...)
 	}
 	response.AuditAnnotations = auditAnnotations(outcome)
 	return response
@@ -224,16 +227,6 @@ func namespaceOr(value, fallback string) string {
 		return value
 	}
 	return fallback
-}
-
-// capWarnings keeps the first maxEarlyWarnings messages and summarises the rest.
-func capWarnings(warnings []string) []string {
-	if len(warnings) <= maxEarlyWarnings {
-		return warnings
-	}
-	extra := len(warnings) - maxEarlyWarnings
-	capped := slices.Clone(warnings[:maxEarlyWarnings])
-	return append(capped, fmt.Sprintf("%s ... and %d more violations; Pod admission reports all of them", earlyPrefix, extra))
 }
 
 // auditAnnotations records which rules and policies matched in the API server audit

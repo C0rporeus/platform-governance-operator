@@ -142,7 +142,7 @@ metadata:
 ### Prerequisites
 - go version v1.25+ (see `go` in `go.mod`; CI also runs the latest stable release).
 - docker version 17.03+.
-- `kubectl` compatible with your cluster. The operator uses `apiextensions.k8s.io/v1` CRDs and `admissionregistration.k8s.io/v1` webhooks; integration tests run against Kubernetes 1.35 (`envtest`).
+- Kubernetes **1.30+** (minimum supported; CRD CEL validation rules and validation ratcheting). `kubectl` compatible with your cluster. The operator uses `apiextensions.k8s.io/v1` CRDs and `admissionregistration.k8s.io/v1` webhooks; integration tests run against Kubernetes 1.35 (`envtest`).
 - Access to a Kubernetes cluster (e.g., kind, k3d).
 - cert-manager installed in the cluster (it issues the webhook serving certificates).
 

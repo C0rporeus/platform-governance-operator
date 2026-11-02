@@ -17,6 +17,7 @@ limitations under the License.
 package policy
 
 import (
+	"slices"
 	"testing"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -152,5 +153,33 @@ func TestValidateTargeting(t *testing.T) {
 				t.Fatalf("err = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestSubjectForStatefulSetMatchesItsPods(t *testing.T) {
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "db"},
+		Spec: appsv1.StatefulSetSpec{Template: corev1.PodTemplateSpec{
+			ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "db"}},
+		}},
+	}
+	got := SubjectForStatefulSet(sts)
+
+	pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
+		Name:            "db-0",
+		Labels:          map[string]string{"app": "db"},
+		OwnerReferences: []metav1.OwnerReference{{APIVersion: "apps/v1", Kind: "StatefulSet", Name: "db"}},
+	}}
+	fromPod := SubjectForPod(pod)
+
+	want := corev1alpha1.PolicyTargetReference{Group: "apps", Kind: "StatefulSet", Name: "db"}
+	if len(got.Refs) != 1 || got.Refs[0] != want {
+		t.Fatalf("refs = %+v, want [%+v]", got.Refs, want)
+	}
+	if !slices.Contains(fromPod.Refs, want) {
+		t.Fatalf("the Pod subject %+v does not carry the StatefulSet ref the template subject uses", fromPod.Refs)
+	}
+	if got.Labels["app"] != "db" {
+		t.Fatalf("labels = %v, want the pod template labels", got.Labels)
 	}
 }

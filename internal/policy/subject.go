@@ -29,6 +29,7 @@ import (
 const (
 	appsGroup       = "apps"
 	kindDeployment  = "Deployment"
+	kindStatefulSet = "StatefulSet"
 	kindReplicaSet  = "ReplicaSet"
 	kindPod         = "Pod"
 	podTemplateHash = "pod-template-hash"
@@ -66,6 +67,16 @@ func SubjectForDeployment(d *appsv1.Deployment) Subject {
 	return Subject{
 		Refs:   []corev1alpha1.PolicyTargetReference{{Group: appsGroup, Kind: kindDeployment, Name: d.Name}},
 		Labels: d.Spec.Template.Labels,
+	}
+}
+
+// SubjectForStatefulSet builds the Subject used to match policies against a
+// StatefulSet, and against the Pods its template will create: a StatefulSet owns
+// its Pods directly, so SubjectForPod produces the same reference for them.
+func SubjectForStatefulSet(s *appsv1.StatefulSet) Subject {
+	return Subject{
+		Refs:   []corev1alpha1.PolicyTargetReference{{Group: appsGroup, Kind: kindStatefulSet, Name: s.Name}},
+		Labels: s.Spec.Template.Labels,
 	}
 }
 

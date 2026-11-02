@@ -34,8 +34,8 @@ func (r *RunAsNonRootRule) Name() string { return "RunAsNonRoot" }
 
 // ISOControl returns the ISO/IEC 27001 control reference.
 const (
-	isoControlA82  = "ISO/IEC 27001 A.8.2"
-	isoControlA818 = "ISO/IEC 27001 A.8.18"
+	isoControlA82 = "ISO/IEC 27001 A.8.2"
+	isoControlA89 = "ISO/IEC 27001 A.8.9"
 )
 
 func (r *RunAsNonRootRule) ISOControl() string { return isoControlA82 }
@@ -87,14 +87,14 @@ func (r *RunAsNonRootRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.
 	return violations
 }
 
-// ReadOnlyRootFilesystemRule enforces read-only root filesystems (ISO/IEC 27001 A.8.18).
+// ReadOnlyRootFilesystemRule enforces read-only root filesystems (ISO/IEC 27001 A.8.9).
 type ReadOnlyRootFilesystemRule struct{}
 
 // Name returns the identifier of the rule.
 func (r *ReadOnlyRootFilesystemRule) Name() string { return "ReadOnlyRootFilesystem" }
 
 // ISOControl returns the ISO/IEC 27001 control reference.
-func (r *ReadOnlyRootFilesystemRule) ISOControl() string { return isoControlA818 }
+func (r *ReadOnlyRootFilesystemRule) ISOControl() string { return isoControlA89 }
 
 // Evaluate verifies that all containers have a read-only root filesystem.
 func (r *ReadOnlyRootFilesystemRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
@@ -232,7 +232,7 @@ func (r *SeccompProfileRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha
 type DisallowHostNamespacesRule struct{}
 
 func (r *DisallowHostNamespacesRule) Name() string       { return "DisallowHostNamespaces" }
-func (r *DisallowHostNamespacesRule) ISOControl() string { return isoControlA818 }
+func (r *DisallowHostNamespacesRule) ISOControl() string { return isoControlA89 }
 func (r *DisallowHostNamespacesRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
 	if !enabled(baseline.Spec.DisallowHostNamespaces) {
 		return nil
@@ -253,7 +253,7 @@ func (r *DisallowHostNamespacesRule) Evaluate(pod *corev1.Pod, baseline *platfor
 type DisallowHostPathRule struct{}
 
 func (r *DisallowHostPathRule) Name() string       { return "DisallowHostPath" }
-func (r *DisallowHostPathRule) ISOControl() string { return isoControlA818 }
+func (r *DisallowHostPathRule) ISOControl() string { return isoControlA89 }
 func (r *DisallowHostPathRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
 	if !enabled(baseline.Spec.DisallowHostPathVolumes) {
 		return nil
@@ -326,7 +326,7 @@ func parseImageReference(raw string) (imageReference, error) {
 type SupplyChainRule struct{}
 
 func (r *SupplyChainRule) Name() string       { return "SupplyChain" }
-func (r *SupplyChainRule) ISOControl() string { return "ISO/IEC 27001 A.8.30" }
+func (r *SupplyChainRule) ISOControl() string { return "ISO/IEC 27001 A.5.21" }
 func registryPrefixAllowed(name string, prefixes []string) bool {
 	for _, prefix := range prefixes {
 		prefix = strings.TrimSpace(prefix)

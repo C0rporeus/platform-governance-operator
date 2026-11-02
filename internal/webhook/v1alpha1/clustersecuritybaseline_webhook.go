@@ -26,6 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	corev1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
+	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
 var clustersecuritybaselinelog = logf.Log.WithName("clustersecuritybaseline-resource")
@@ -47,13 +48,13 @@ type ClusterSecurityBaselineCustomValidator struct{}
 // ValidateCreate implements webhook.CustomValidator.
 func (v *ClusterSecurityBaselineCustomValidator) ValidateCreate(_ context.Context, obj *corev1alpha1.ClusterSecurityBaseline) (admission.Warnings, error) {
 	clustersecuritybaselinelog.Info("Validation for ClusterSecurityBaseline upon creation", "name", obj.GetName())
-	return nil, validateClusterSecurityBaselineSpec(&obj.Spec)
+	return policy.TargetingWarnings(obj.Spec.PolicyTargeting), validateClusterSecurityBaselineSpec(&obj.Spec)
 }
 
 // ValidateUpdate implements webhook.CustomValidator.
 func (v *ClusterSecurityBaselineCustomValidator) ValidateUpdate(_ context.Context, _, newObj *corev1alpha1.ClusterSecurityBaseline) (admission.Warnings, error) {
 	clustersecuritybaselinelog.Info("Validation for ClusterSecurityBaseline upon update", "name", newObj.GetName())
-	return nil, validateClusterSecurityBaselineSpec(&newObj.Spec)
+	return policy.TargetingWarnings(newObj.Spec.PolicyTargeting), validateClusterSecurityBaselineSpec(&newObj.Spec)
 }
 
 // ValidateDelete implements webhook.CustomValidator.

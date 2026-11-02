@@ -66,13 +66,13 @@ type SecurityBaselineCustomValidator struct{}
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type SecurityBaseline.
 func (v *SecurityBaselineCustomValidator) ValidateCreate(_ context.Context, obj *corev1alpha1.SecurityBaseline) (admission.Warnings, error) {
 	securitybaselinelog.Info("Validation for SecurityBaseline upon creation", "name", obj.GetName())
-	return nil, validateSecurityBaselineSpec(&obj.Spec)
+	return policy.TargetingWarnings(obj.Spec.PolicyTargeting), validateSecurityBaselineSpec(&obj.Spec)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type SecurityBaseline.
 func (v *SecurityBaselineCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj *corev1alpha1.SecurityBaseline) (admission.Warnings, error) {
 	securitybaselinelog.Info("Validation for SecurityBaseline upon update", "name", newObj.GetName())
-	return nil, validateSecurityBaselineSpec(&newObj.Spec)
+	return policy.TargetingWarnings(newObj.Spec.PolicyTargeting), validateSecurityBaselineSpec(&newObj.Spec)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type SecurityBaseline.

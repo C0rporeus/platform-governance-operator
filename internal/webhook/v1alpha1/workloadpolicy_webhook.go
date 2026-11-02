@@ -80,13 +80,13 @@ type WorkloadPolicyCustomValidator struct{}
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type WorkloadPolicy.
 func (v *WorkloadPolicyCustomValidator) ValidateCreate(_ context.Context, obj *corev1alpha1.WorkloadPolicy) (admission.Warnings, error) {
 	workloadpolicylog.Info("Validation for WorkloadPolicy upon creation", "name", obj.GetName())
-	return nil, validateWorkloadPolicySpec(obj)
+	return policy.TargetingWarnings(obj.Spec.PolicyTargeting), validateWorkloadPolicySpec(obj)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type WorkloadPolicy.
 func (v *WorkloadPolicyCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj *corev1alpha1.WorkloadPolicy) (admission.Warnings, error) {
 	workloadpolicylog.Info("Validation for WorkloadPolicy upon update", "name", newObj.GetName())
-	return nil, validateWorkloadPolicySpec(newObj)
+	return policy.TargetingWarnings(newObj.Spec.PolicyTargeting), validateWorkloadPolicySpec(newObj)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type WorkloadPolicy.

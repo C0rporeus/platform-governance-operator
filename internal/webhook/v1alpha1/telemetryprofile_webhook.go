@@ -67,13 +67,13 @@ type TelemetryProfileCustomValidator struct{}
 // ValidateCreate implements webhook.CustomValidator so a webhook will be registered for the type TelemetryProfile.
 func (v *TelemetryProfileCustomValidator) ValidateCreate(_ context.Context, obj *corev1alpha1.TelemetryProfile) (admission.Warnings, error) {
 	telemetryprofilelog.Info("Validation for TelemetryProfile upon creation", "name", obj.GetName())
-	return nil, validateTelemetryProfileSpec(obj)
+	return policy.TargetingWarnings(obj.Spec.PolicyTargeting), validateTelemetryProfileSpec(obj)
 }
 
 // ValidateUpdate implements webhook.CustomValidator so a webhook will be registered for the type TelemetryProfile.
 func (v *TelemetryProfileCustomValidator) ValidateUpdate(_ context.Context, oldObj, newObj *corev1alpha1.TelemetryProfile) (admission.Warnings, error) {
 	telemetryprofilelog.Info("Validation for TelemetryProfile upon update", "name", newObj.GetName())
-	return nil, validateTelemetryProfileSpec(newObj)
+	return policy.TargetingWarnings(newObj.Spec.PolicyTargeting), validateTelemetryProfileSpec(newObj)
 }
 
 // ValidateDelete implements webhook.CustomValidator so a webhook will be registered for the type TelemetryProfile.

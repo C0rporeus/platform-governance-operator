@@ -444,6 +444,7 @@ The suite uses its own kubeconfig (`bin/e2e-kubeconfig`) and refuses to run agai
 - Only Pods are enforced. `Deployment`, `StatefulSet`, `DaemonSet`, `Job` and `CronJob` get early feedback (warnings by default); Pods created by other controllers are validated when they are created.
 - Workloads that were already running when a policy was created are not re-evaluated; the early check only looks at template changes. A continuous audit of existing workloads is planned (`HU-02.5`).
 - Warnings are informational. To make them a change-control gate, fail your pipeline when `kubectl apply --dry-run=server` prints `Warning: [early]` (a ready-made script is planned, `TASK-02.6.9`).
+- If a policy targets a `Pod` or `ReplicaSet` by name, or selects on a label that workload controllers add (`pod-template-hash`, `job-name`, ...), the operator accepts it with a warning on `kubectl apply`: it is only matched when Pods are created, not in the early check. Prefer a `targetRef` to the Deployment or a selector on your own labels.
 - Pods created by controllers outside Kubernetes (for example Argo Rollouts) get no early feedback; Pod admission validates them.
 - Ephemeral containers (`kubectl debug`) are added through a subresource that the webhooks do not intercept.
 - `mandatoryLabels` are added to Pods, not to their owning workloads.

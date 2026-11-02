@@ -41,15 +41,25 @@ spec:
             properties:
               defaultLimits:
                 additionalProperties:
+                  description: |-
+                    QuantityString is a Kubernetes resource quantity written as text, such as "100m" or "128Mi".
+                    Its length is bounded so CEL rules that parse it have a known worst-case cost.
+                  maxLength: 64
                   type: string
                 description: DefaultLimits defines the default resource limits applied
                   to containers
+                maxProperties: 16
                 type: object
               defaultRequests:
                 additionalProperties:
+                  description: |-
+                    QuantityString is a Kubernetes resource quantity written as text, such as "100m" or "128Mi".
+                    Its length is bounded so CEL rules that parse it have a known worst-case cost.
+                  maxLength: 64
                   type: string
                 description: DefaultRequests defines the default resource requests
                   applied to containers
+                maxProperties: 16
                 type: object
               horizontalScaling:
                 description: |-
@@ -86,11 +96,22 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+                x-kubernetes-validations:
+                - fieldPath: .maxReplicas
+                  message: 'maxReplicas must be greater than or equal to minReplicas
+                    (defaults: minReplicas 2, maxReplicas 10)'
+                  reason: FieldValueInvalid
+                  rule: '!has(self.minReplicas) || !has(self.maxReplicas) || self.maxReplicas
+                    >= self.minReplicas'
               mandatoryLabels:
                 additionalProperties:
+                  description: LabelValueString is the default value of a mandatory
+                    label (at most 63 characters, like a label value).
+                  maxLength: 63
                   type: string
                 description: MandatoryLabels defines a map of labels and their default
                   values that must be present on workloads
+                maxProperties: 32
                 type: object
               priority:
                 default: 0
@@ -169,7 +190,33 @@ spec:
                 - kind
                 - name
                 type: object
+                x-kubernetes-validations:
+                - fieldPath: .kind
+                  message: 'kind is not valid for the API group: core is Pod or ReplicationController,
+                    apps is Deployment, StatefulSet, DaemonSet or ReplicaSet, batch
+                    is Job (a CronJob owns Jobs, not Pods)'
+                  reason: FieldValueInvalid
+                  rule: '(!has(self.group) || size(self.group) == 0) ? self.kind in
+                    [''Pod'', ''ReplicationController''] : self.group == ''apps''
+                    ? self.kind in [''Deployment'', ''StatefulSet'', ''DaemonSet'',
+                    ''ReplicaSet''] : self.group == ''batch'' ? self.kind == ''Job''
+                    : true'
             type: object
+            x-kubernetes-validations:
+            - fieldPath: .horizontalScaling
+              message: horizontalScaling only applies to a targetRef of kind Deployment;
+                use a selector or no targeting for other workloads
+              reason: FieldValueInvalid
+              rule: '!has(self.horizontalScaling) || !has(self.targetRef) || self.targetRef.kind
+                == ''Deployment'''
+            - fieldPath: .defaultRequests
+              message: 'defaultRequests cannot exceed defaultLimits for the same resource:
+                the resulting Pod would be rejected by the API server'
+              reason: FieldValueInvalid
+              rule: '!has(self.defaultRequests) || !has(self.defaultLimits) || self.defaultRequests.all(r,
+                !(r in self.defaultLimits) || !isQuantity(self.defaultRequests[r])
+                || !isQuantity(self.defaultLimits[r]) || quantity(self.defaultRequests[r]).compareTo(quantity(self.defaultLimits[r]))
+                <= 0)'
           status:
             description: status defines the observed state of WorkloadPolicy
             properties:

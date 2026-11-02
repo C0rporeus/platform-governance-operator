@@ -101,13 +101,13 @@ func validateWorkloadPolicySpec(obj *corev1alpha1.WorkloadPolicy) error {
 	}
 
 	for resourceName, resourceValue := range obj.Spec.DefaultRequests {
-		if _, err := resource.ParseQuantity(resourceValue); err != nil {
+		if _, err := resource.ParseQuantity(string(resourceValue)); err != nil {
 			return fmt.Errorf("invalid defaultRequests quantity for %q: %q", resourceName, resourceValue)
 		}
 	}
 
 	for resourceName, resourceValue := range obj.Spec.DefaultLimits {
-		if _, err := resource.ParseQuantity(resourceValue); err != nil {
+		if _, err := resource.ParseQuantity(string(resourceValue)); err != nil {
 			return fmt.Errorf("invalid defaultLimits quantity for %q: %q", resourceName, resourceValue)
 		}
 	}
@@ -116,7 +116,7 @@ func validateWorkloadPolicySpec(obj *corev1alpha1.WorkloadPolicy) error {
 		if strings.TrimSpace(key) == "" {
 			return fmt.Errorf("mandatoryLabels key cannot be empty")
 		}
-		if strings.TrimSpace(value) == "" {
+		if strings.TrimSpace(string(value)) == "" {
 			return fmt.Errorf("mandatoryLabels value for key %q cannot be empty", key)
 		}
 	}

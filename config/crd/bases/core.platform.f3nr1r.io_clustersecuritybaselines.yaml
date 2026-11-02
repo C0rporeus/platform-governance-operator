@@ -46,13 +46,17 @@ spec:
                   when requiring drop ALL.
                 items:
                   description: Capability represent POSIX capabilities type
+                  maxLength: 40
                   type: string
+                maxItems: 64
                 type: array
               allowedRegistries:
                 description: AllowedRegistries restricts image references to these
                   registry or repository prefixes.
                 items:
+                  maxLength: 255
                   type: string
+                maxItems: 64
                 type: array
               disallowHostNamespaces:
                 description: DisallowHostNamespaces rejects hostNetwork, hostPID,
@@ -91,7 +95,9 @@ spec:
               excludedNamespaces:
                 description: ExcludedNamespaces list namespaces to bypass this baseline
                 items:
+                  maxLength: 63
                   type: string
+                maxItems: 256
                 type: array
               namespaceSelector:
                 description: |-
@@ -234,6 +240,17 @@ spec:
                 - kind
                 - name
                 type: object
+                x-kubernetes-validations:
+                - fieldPath: .kind
+                  message: 'kind is not valid for the API group: core is Pod or ReplicationController,
+                    apps is Deployment, StatefulSet, DaemonSet or ReplicaSet, batch
+                    is Job (a CronJob owns Jobs, not Pods)'
+                  reason: FieldValueInvalid
+                  rule: '(!has(self.group) || size(self.group) == 0) ? self.kind in
+                    [''Pod'', ''ReplicationController''] : self.group == ''apps''
+                    ? self.kind in [''Deployment'', ''StatefulSet'', ''DaemonSet'',
+                    ''ReplicaSet''] : self.group == ''batch'' ? self.kind == ''Job''
+                    : true'
             required:
             - readOnlyRootFilesystem
             - runAsNonRoot

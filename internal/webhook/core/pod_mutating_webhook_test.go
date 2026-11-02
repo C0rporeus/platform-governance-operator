@@ -76,7 +76,7 @@ func TestPodMutatorApplyPolicyResourcesRejectsInvalidQuantity(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "policy"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			DefaultRequests: map[string]string{"cpu": "not-a-quantity"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "not-a-quantity"},
 		},
 	}
 
@@ -98,7 +98,7 @@ func TestPodMutatorApplyLabelsInjectsAndDoesNotOverride(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "policy"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			MandatoryLabels: map[string]string{
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{
 				"cost-center": "engineering",
 				"existing":    "override-attempt",
 			},
@@ -125,7 +125,7 @@ func TestPodMutatorApplyLabelsNilLabelsMap(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "policy"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			MandatoryLabels: map[string]string{"team": "platform"},
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{"team": "platform"},
 		},
 	}
 
@@ -153,8 +153,8 @@ func TestPodMutatorApplyResourcesHappyPath(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "policy"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			DefaultRequests: map[string]string{"cpu": "100m", "memory": "128Mi"},
-			DefaultLimits:   map[string]string{"cpu": "500m", "memory": "512Mi"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "100m", "memory": "128Mi"},
+			DefaultLimits:   map[string]platformv1alpha1.QuantityString{"cpu": "500m", "memory": "512Mi"},
 		},
 	}
 
@@ -200,7 +200,7 @@ func TestPodMutatorApplyResourcesDoesNotOverrideExisting(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "policy"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			DefaultRequests: map[string]string{"cpu": "100m", "memory": "128Mi"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "100m", "memory": "128Mi"},
 		},
 	}
 
@@ -231,8 +231,8 @@ func TestPodMutatorHandleFullFlow(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "defaults", Namespace: "team-a"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			MandatoryLabels: map[string]string{"env": "production"},
-			DefaultRequests: map[string]string{"cpu": "100m"},
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{"env": "production"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "100m"},
 		},
 	}
 	profile := &platformv1alpha1.TelemetryProfile{
@@ -298,14 +298,14 @@ func TestPodMutatorHandleSkipsInvalidPolicyAndAppliesValid(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "bad-policy", Namespace: "team-a"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
 			Priority:        10,
-			DefaultRequests: map[string]string{"cpu": "not-a-quantity"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "not-a-quantity"},
 		},
 	}
 	goodPolicy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "good-policy", Namespace: "team-a"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
 			Priority:        1,
-			MandatoryLabels: map[string]string{"team": "platform"},
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{"team": "platform"},
 		},
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(badPolicy, goodPolicy).Build()
@@ -373,8 +373,8 @@ func TestPodMutatorEmptyContainersList(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "policy", Namespace: "team-a"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			MandatoryLabels: map[string]string{"env": "production"},
-			DefaultRequests: map[string]string{"cpu": "100m"},
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{"env": "production"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "100m"},
 		},
 	}
 	cl := fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build()
@@ -450,7 +450,7 @@ func TestPodMutatorApplyOnlyDefaultLimits(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "limits-only"},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			DefaultLimits: map[string]string{"cpu": "500m", "memory": "256Mi"},
+			DefaultLimits: map[string]platformv1alpha1.QuantityString{"cpu": "500m", "memory": "256Mi"},
 		},
 	}
 

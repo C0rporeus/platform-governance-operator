@@ -69,6 +69,9 @@ type SecurityBaselineSpec struct {
 	RequireDropAllCapabilities *bool `json:"requireDropAllCapabilities,omitempty"`
 
 	// AllowedCapabilities lists capabilities permitted in capabilities.add when requiring drop ALL.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:Type=string
+	// +kubebuilder:validation:items:MaxLength=40
 	// +optional
 	AllowedCapabilities []corev1.Capability `json:"allowedCapabilities,omitempty"`
 
@@ -93,10 +96,14 @@ type SecurityBaselineSpec struct {
 	RequireImageDigest *bool `json:"requireImageDigest,omitempty"`
 
 	// AllowedRegistries restricts image references to these registry or repository prefixes.
+	// +kubebuilder:validation:MaxItems=64
+	// +kubebuilder:validation:items:MaxLength=255
 	// +optional
 	AllowedRegistries []string `json:"allowedRegistries,omitempty"`
 
 	// ExcludedNamespaces list namespaces to bypass this baseline
+	// +kubebuilder:validation:MaxItems=256
+	// +kubebuilder:validation:items:MaxLength=63
 	// +optional
 	ExcludedNamespaces []string `json:"excludedNamespaces,omitempty"`
 }

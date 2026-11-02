@@ -114,13 +114,13 @@ func TestPodMutatorMoreSpecificPolicyWinsOverHigherPriority(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "ns-wide", Namespace: testNamespace},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
 			Priority:        100,
-			DefaultRequests: map[string]string{"cpu": "100m"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "100m"},
 		},
 	}
 	targeted := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "api-only", Namespace: testNamespace},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			DefaultRequests: map[string]string{"cpu": "500m"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "500m"},
 			PolicyTargeting: platformv1alpha1.PolicyTargeting{
 				TargetRef: &platformv1alpha1.PolicyTargetReference{Group: "apps", Kind: "Deployment", Name: "api"},
 			},
@@ -129,7 +129,7 @@ func TestPodMutatorMoreSpecificPolicyWinsOverHigherPriority(t *testing.T) {
 	unrelated := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "web-only", Namespace: testNamespace},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			DefaultRequests: map[string]string{"memory": "1Gi"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"memory": "1Gi"},
 			PolicyTargeting: platformv1alpha1.PolicyTargeting{
 				Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": "web"}},
 			},

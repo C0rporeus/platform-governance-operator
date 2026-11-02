@@ -63,31 +63,31 @@ var _ = Describe("WorkloadPolicy Webhook", func() {
 		})
 
 		It("Should deny creation with an invalid defaultRequests quantity", func() {
-			obj.Spec.DefaultRequests = map[string]string{"cpu": "not-a-quantity"}
+			obj.Spec.DefaultRequests = map[string]corev1alpha1.QuantityString{"cpu": "not-a-quantity"}
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should deny creation with an invalid defaultLimits quantity", func() {
-			obj.Spec.DefaultLimits = map[string]string{"memory": "not-a-quantity"}
+			obj.Spec.DefaultLimits = map[string]corev1alpha1.QuantityString{"memory": "not-a-quantity"}
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should deny creation with an empty mandatoryLabels key", func() {
-			obj.Spec.MandatoryLabels = map[string]string{"": "value"}
+			obj.Spec.MandatoryLabels = map[string]corev1alpha1.LabelValueString{"": "value"}
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should deny creation with an empty mandatoryLabels value", func() {
-			obj.Spec.MandatoryLabels = map[string]string{"key": ""}
+			obj.Spec.MandatoryLabels = map[string]corev1alpha1.LabelValueString{"key": ""}
 			_, err := validator.ValidateCreate(ctx, obj)
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("Should admit a valid update", func() {
-			obj.Spec.DefaultRequests = map[string]string{"cpu": "100m"}
+			obj.Spec.DefaultRequests = map[string]corev1alpha1.QuantityString{"cpu": "100m"}
 			_, err := validator.ValidateUpdate(ctx, oldObj, obj)
 			Expect(err).NotTo(HaveOccurred())
 		})

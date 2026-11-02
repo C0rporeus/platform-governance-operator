@@ -497,21 +497,21 @@ func (in *WorkloadPolicySpec) DeepCopyInto(out *WorkloadPolicySpec) {
 	in.PolicyTargeting.DeepCopyInto(&out.PolicyTargeting)
 	if in.DefaultRequests != nil {
 		in, out := &in.DefaultRequests, &out.DefaultRequests
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]QuantityString, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}
 	}
 	if in.DefaultLimits != nil {
 		in, out := &in.DefaultLimits, &out.DefaultLimits
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]QuantityString, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}
 	}
 	if in.MandatoryLabels != nil {
 		in, out := &in.MandatoryLabels, &out.MandatoryLabels
-		*out = make(map[string]string, len(*in))
+		*out = make(map[string]LabelValueString, len(*in))
 		for key, val := range *in {
 			(*out)[key] = val
 		}

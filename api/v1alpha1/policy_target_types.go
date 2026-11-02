@@ -23,6 +23,13 @@ import (
 // PolicyTargetReference identifies a single resource a policy attaches to.
 // It follows the Gateway API PolicyAttachment (GEP-713) shape; the target is
 // always resolved in the namespace of the policy.
+//
+// Pods are matched through their owners, so for the API groups whose kinds are known
+// the kind must belong to the group: a reference such as kind Deployment without group
+// apps would never match anything and would fail silently. Groups that are not listed
+// (for example argoproj.io) are accepted as they are.
+//
+// +kubebuilder:validation:XValidation:rule="(!has(self.group) || size(self.group) == 0) ? self.kind in ['Pod', 'ReplicationController'] : self.group == 'apps' ? self.kind in ['Deployment', 'StatefulSet', 'DaemonSet', 'ReplicaSet'] : self.group == 'batch' ? self.kind == 'Job' : true",message="kind is not valid for the API group: core is Pod or ReplicationController, apps is Deployment, StatefulSet, DaemonSet or ReplicaSet, batch is Job (a CronJob owns Jobs, not Pods)",reason=FieldValueInvalid,fieldPath=.kind
 type PolicyTargetReference struct {
 	// Group is the API group of the target. Empty means the core group.
 	// +kubebuilder:validation:MaxLength=253

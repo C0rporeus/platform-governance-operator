@@ -151,8 +151,8 @@ func TestPodMutatorIgnoresUpdates(t *testing.T) {
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "defaults", Namespace: testNamespace},
 		Spec: platformv1alpha1.WorkloadPolicySpec{
-			MandatoryLabels: map[string]string{"env": "prod"},
-			DefaultRequests: map[string]string{"cpu": "100m"},
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{"env": "prod"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "100m"},
 		},
 	}
 	m := &PodMutator{Client: fake.NewClientBuilder().WithScheme(scheme).WithObjects(policy).Build(),

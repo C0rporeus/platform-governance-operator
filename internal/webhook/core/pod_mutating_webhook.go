@@ -170,7 +170,7 @@ func (m *PodMutator) applyPolicyLabels(pod *corev1.Pod, wp *platformv1alpha1.Wor
 	mutated := false
 	for lbl, defaultVal := range wp.Spec.MandatoryLabels {
 		if _, exists := pod.Labels[lbl]; !exists {
-			pod.Labels[lbl] = defaultVal
+			pod.Labels[lbl] = string(defaultVal)
 			mutated = true
 		}
 	}
@@ -190,7 +190,7 @@ func (m *PodMutator) applyPolicyResources(pod *corev1.Pod, wp *platformv1alpha1.
 				continue
 			}
 
-			qty, parseErr := resource.ParseQuantity(rVal)
+			qty, parseErr := resource.ParseQuantity(string(rVal))
 			if parseErr != nil {
 				return false, fmt.Errorf(
 					"WorkloadPolicy %s has invalid defaultRequests quantity for %s: %q",
@@ -212,7 +212,7 @@ func (m *PodMutator) applyPolicyResources(pod *corev1.Pod, wp *platformv1alpha1.
 				continue
 			}
 
-			qty, parseErr := resource.ParseQuantity(rVal)
+			qty, parseErr := resource.ParseQuantity(string(rVal))
 			if parseErr != nil {
 				return false, fmt.Errorf(
 					"WorkloadPolicy %s has invalid defaultLimits quantity for %s: %q",

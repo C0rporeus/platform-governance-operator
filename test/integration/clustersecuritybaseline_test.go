@@ -171,7 +171,7 @@ var _ = Describe("ClusterSecurityBaseline inheritance", func() {
 				SecurityBaselineSpec: corev1alpha1.SecurityBaselineSpec{
 					RunAsNonRoot: true,
 					PolicyTargeting: corev1alpha1.PolicyTargeting{
-						TargetRef: &corev1alpha1.PolicyTargetReference{Kind: "Deployment", Name: "x"},
+						TargetRef: &corev1alpha1.PolicyTargetReference{Group: "apps", Kind: "Deployment", Name: "x"},
 					},
 				},
 			},

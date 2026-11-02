@@ -149,7 +149,7 @@ var _ = Describe("WorkloadPolicy HPA Integration", func() {
 				ObjectMeta: metav1.ObjectMeta{Name: "no-hpa", Namespace: testNs},
 				Spec: corev1alpha1.WorkloadPolicySpec{
 					Priority:        999,
-					MandatoryLabels: map[string]string{"team": "platform"},
+					MandatoryLabels: map[string]corev1alpha1.LabelValueString{"team": "platform"},
 				},
 			}
 			withHPA := integPolicy(testNs, "with-hpa", 1, true)

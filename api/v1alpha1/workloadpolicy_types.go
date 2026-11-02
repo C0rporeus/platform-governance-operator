@@ -20,7 +20,19 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// QuantityString is a Kubernetes resource quantity written as text, such as "100m" or "128Mi".
+// Its length is bounded so CEL rules that parse it have a known worst-case cost.
+// +kubebuilder:validation:MaxLength=64
+type QuantityString string
+
+// LabelValueString is the default value of a mandatory label (at most 63 characters, like a label value).
+// +kubebuilder:validation:MaxLength=63
+type LabelValueString string
+
 // WorkloadPolicySpec defines the desired state of WorkloadPolicy
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.horizontalScaling) || !has(self.targetRef) || self.targetRef.kind == 'Deployment'",message="horizontalScaling only applies to a targetRef of kind Deployment; use a selector or no targeting for other workloads",reason=FieldValueInvalid,fieldPath=.horizontalScaling
+// +kubebuilder:validation:XValidation:rule="!has(self.defaultRequests) || !has(self.defaultLimits) || self.defaultRequests.all(r, !(r in self.defaultLimits) || !isQuantity(self.defaultRequests[r]) || !isQuantity(self.defaultLimits[r]) || quantity(self.defaultRequests[r]).compareTo(quantity(self.defaultLimits[r])) <= 0)",message="defaultRequests cannot exceed defaultLimits for the same resource: the resulting Pod would be rejected by the API server",reason=FieldValueInvalid,fieldPath=.defaultRequests
 type WorkloadPolicySpec struct {
 	// PolicyTargeting restricts the policy to a targetRef or label selector.
 	// Omitting both applies the policy to the whole namespace.
@@ -28,16 +40,19 @@ type WorkloadPolicySpec struct {
 	PolicyTargeting `json:",inline"`
 
 	// DefaultRequests defines the default resource requests applied to containers
+	// +kubebuilder:validation:MaxProperties=16
 	// +optional
-	DefaultRequests map[string]string `json:"defaultRequests,omitempty"`
+	DefaultRequests map[string]QuantityString `json:"defaultRequests,omitempty"`
 
 	// DefaultLimits defines the default resource limits applied to containers
+	// +kubebuilder:validation:MaxProperties=16
 	// +optional
-	DefaultLimits map[string]string `json:"defaultLimits,omitempty"`
+	DefaultLimits map[string]QuantityString `json:"defaultLimits,omitempty"`
 
 	// MandatoryLabels defines a map of labels and their default values that must be present on workloads
+	// +kubebuilder:validation:MaxProperties=32
 	// +optional
-	MandatoryLabels map[string]string `json:"mandatoryLabels,omitempty"`
+	MandatoryLabels map[string]LabelValueString `json:"mandatoryLabels,omitempty"`
 
 	// Priority determines the precedence of the policy when multiple apply.
 	// Higher numbers indicate higher priority.
@@ -61,6 +76,8 @@ const (
 )
 
 // HorizontalScalingPolicy defines default HPA behavior for workloads.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.minReplicas) || !has(self.maxReplicas) || self.maxReplicas >= self.minReplicas",message="maxReplicas must be greater than or equal to minReplicas (defaults: minReplicas 2, maxReplicas 10)",reason=FieldValueInvalid,fieldPath=.maxReplicas
 type HorizontalScalingPolicy struct {
 	// EnabledByDefault indicates whether HPA should be created for workloads
 	// unless explicitly overridden by annotation.

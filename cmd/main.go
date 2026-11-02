@@ -66,6 +66,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var earlyValidationFlag string
+	var earlyFidelityFlag string
 	var tlsOpts []func(*tls.Config)
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
@@ -86,6 +87,10 @@ func main() {
 		"What the early validation of Deployments and StatefulSets does with a violation: "+
 			"off (webhook not registered), warn (report as warnings, never reject) or enforce "+
 			"(reject what Pod admission would reject). Pod admission always enforces.")
+	flag.StringVar(&earlyFidelityFlag, "early-validation-fidelity", string(corewebhook.FidelityTemplate),
+		"How faithfully the early validation reproduces Pod admission: template (evaluates the Pod template) or "+
+			"dry-run (also sends a synthetic Pod through the whole admission chain; needs the config/dry-run overlay, "+
+			"otherwise the operator stays in template).")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	opts := zap.Options{}
@@ -97,6 +102,12 @@ func main() {
 	earlyValidationMode, err := corewebhook.ParseEarlyValidationMode(earlyValidationFlag)
 	if err != nil {
 		setupLog.Error(err, "Invalid --early-validation-mode")
+		os.Exit(1)
+	}
+
+	earlyFidelity, err := corewebhook.ParseFidelity(earlyFidelityFlag)
+	if err != nil {
+		setupLog.Error(err, "Invalid --early-validation-fidelity")
 		os.Exit(1)
 	}
 
@@ -258,7 +269,7 @@ func main() {
 			os.Exit(1)
 		}
 		if earlyValidationMode != corewebhook.EarlyValidationOff {
-			if err := corewebhook.SetupWorkloadWebhookWithManager(mgr, earlyValidationMode); err != nil {
+			if err := corewebhook.SetupWorkloadWebhookWithManager(mgr, earlyValidationMode, earlyFidelity); err != nil {
 				setupLog.Error(err, "Failed to create webhook", "webhook", "Workload")
 				os.Exit(1)
 			}

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -53,6 +54,8 @@ func ParseEarlyValidationMode(value string) (EarlyValidationMode, error) {
 }
 
 const (
+	kindJob = "Job"
+
 	// earlyPrefix tells the user a message comes from the early check, not from Pod admission.
 	earlyPrefix = "[early]"
 
@@ -73,7 +76,11 @@ type WorkloadValidator struct {
 	// OperatorNamespace is the namespace the operator runs in (see Governor).
 	OperatorNamespace string
 	Mode              EarlyValidationMode
-	decoder           admission.Decoder
+	// DryRun, when set, adds the verdict of the whole admission chain on a synthetic Pod
+	// to the template evaluation (ADR-0004). Nil means template fidelity.
+	DryRun        PodDryRunner
+	DryRunTimeout time.Duration
+	decoder       admission.Decoder
 }
 
 // InjectDecoder injects the decoder for admission requests.
@@ -144,11 +151,12 @@ func (v *WorkloadValidator) Handle(ctx context.Context, req admission.Request) a
 		return admission.Allowed("early validation skipped: policies could not be read")
 	}
 
-	return v.respond(current, req, Classify(findings))
+	outcome := Classify(findings)
+	return v.respond(current, req, outcome, v.dryRunExtras(ctx, current, req, findings, outcome))
 }
 
 // respond turns the classified findings into the admission response for the configured mode.
-func (v *WorkloadValidator) respond(current template, req admission.Request, outcome Outcome) admission.Response {
+func (v *WorkloadValidator) respond(current template, req admission.Request, outcome Outcome, extras dryRunExtras) admission.Response {
 	dryRun := isDryRun(req)
 	label := fmt.Sprintf("%s %s/%s", current.kind, req.Namespace, current.name)
 
@@ -166,6 +174,7 @@ func (v *WorkloadValidator) respond(current template, req admission.Request, out
 	} else {
 		warned = append(slices.Clone(outcome.Enforce), outcome.Warn...)
 	}
+	denials = append(denials, extras.denials...)
 
 	warnGroups := groupFindings(warned)
 	for _, g := range warnGroups {
@@ -189,7 +198,7 @@ func (v *WorkloadValidator) respond(current template, req admission.Request, out
 	} else {
 		response = admission.Allowed("")
 	}
-	if warnings := renderWarnings(warnGroups); len(warnings) > 0 {
+	if warnings := append(renderWarningsWithin(warnGroups, warningBudgetRunes-runeLen(extras.warnings)), extras.warnings...); len(warnings) > 0 {
 		response = response.WithWarnings(warnings...)
 	}
 	response.AuditAnnotations = auditAnnotations(outcome)
@@ -218,7 +227,7 @@ func (v *WorkloadValidator) decode(kind string, raw []byte) (template, error) {
 			return template{}, err
 		}
 		return template{kind: kind, name: d.Name, pod: d.Spec.Template, subject: policy.SubjectForDaemonSet(d), deleted: isDeleting(d.ObjectMeta)}, nil
-	case "Job":
+	case kindJob:
 		j := &batchv1.Job{}
 		if err := v.decoder.DecodeRaw(rawObject, j); err != nil {
 			return template{}, err
@@ -281,7 +290,7 @@ func sortedKeys(set map[string]struct{}) []string {
 
 // SetupWorkloadWebhookWithManager registers the early workload validation with the
 // Manager. Imperative registration, like the Pod webhooks: these are core types.
-func SetupWorkloadWebhookWithManager(mgr ctrl.Manager, mode EarlyValidationMode) error {
+func SetupWorkloadWebhookWithManager(mgr ctrl.Manager, mode EarlyValidationMode, fidelity Fidelity) error {
 	handler := &WorkloadValidator{
 		Client: mgr.GetClient(),
 		//nolint:staticcheck // controller-runtime recorder migration pending
@@ -290,6 +299,30 @@ func SetupWorkloadWebhookWithManager(mgr ctrl.Manager, mode EarlyValidationMode)
 		Mode:              mode,
 		decoder:           admission.NewDecoder(mgr.GetScheme()),
 	}
+	handler.DryRun = dryRunnerFor(mgr, fidelity)
 	mgr.GetWebhookServer().Register("/validate-apps-v1-workload", &webhook.Admission{Handler: handler})
 	return nil
+}
+
+// dryRunnerFor returns the dry runner for the requested fidelity, or nil (template fidelity)
+// when the safeguard that confines the operator to dry runs is not installed: the mode
+// fails closed and says why (ADR-0004, safeguard 2).
+func dryRunnerFor(mgr ctrl.Manager, fidelity Fidelity) PodDryRunner {
+	if fidelity != FidelityDryRun {
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if ok, why := SafeguardInstalled(ctx, mgr.GetAPIReader()); !ok {
+		workloadlog.Info("Dry-run fidelity NOT enabled; using template fidelity", "reason", why,
+			"fix", "install config/dry-run, which ships the permission and the safeguard together")
+		return nil
+	}
+	runner, err := NewAPIDryRunner(mgr.GetConfig(), client.Options{Scheme: mgr.GetScheme(), Mapper: mgr.GetRESTMapper()})
+	if err != nil {
+		workloadlog.Error(err, "Dry-run fidelity NOT enabled; using template fidelity")
+		return nil
+	}
+	workloadlog.Info("Dry-run fidelity enabled: workloads are also checked through the whole admission chain")
+	return runner
 }

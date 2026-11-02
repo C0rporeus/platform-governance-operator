@@ -294,7 +294,7 @@ func mustRead(t *testing.T, rel string) []byte {
 
 func kustomizeScalar(t *testing.T, doc, key string) string {
 	t.Helper()
-	for _, line := range strings.Split(doc, "\n") {
+	for line := range strings.SplitSeq(doc, "\n") {
 		if value, ok := strings.CutPrefix(line, key+":"); ok {
 			return strings.TrimSpace(value)
 		}

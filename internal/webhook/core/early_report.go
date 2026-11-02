@@ -98,9 +98,9 @@ func (g violationGroup) eventMessage(label string) string {
 
 func (g violationGroup) source() client.Object { return g.finding.Source }
 
-// renderWarnings returns the lines of the groups that fit in the budget and, when some
+// renderWarningsWithin returns, within budget runes, the lines of the groups that fit in the budget and, when some
 // do not, a last line saying how many were left out. The groups arrive most important first.
-func renderWarnings(groups []violationGroup) []string {
+func renderWarningsWithin(groups []violationGroup, budget int) []string {
 	lines := make([]string, 0, len(groups)+1)
 	used := 0
 	for i, g := range groups {
@@ -111,7 +111,7 @@ func renderWarnings(groups []violationGroup) []string {
 		if i < len(groups)-1 {
 			reserve = warningLineRunes
 		}
-		if used+size+reserve > warningBudgetRunes {
+		if used+size+reserve > budget {
 			left := len(groups) - i
 			lines = append(lines, fmt.Sprintf("%s ... and %d more kinds of violation; Pod admission reports all of them", earlyPrefix, left))
 			return lines
@@ -129,4 +129,12 @@ func truncateRunes(text string, limit int) string {
 	}
 	runes := []rune(text)
 	return strings.TrimRight(string(runes[:limit-1]), " ,;:") + "…"
+}
+
+func runeLen(lines []string) int {
+	total := 0
+	for _, l := range lines {
+		total += utf8.RuneCountInString(l)
+	}
+	return total
 }

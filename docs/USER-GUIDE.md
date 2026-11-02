@@ -329,7 +329,7 @@ deployment.apps/web configured
 - The default mode is `warn`: you see the warnings and the workload is still applied. Platform teams can switch to `enforce` (`--early-validation-mode=enforce`) once the warnings are gone; then the apply is rejected for the violations Pod admission would reject. `off` disables it.
 - Changing only replicas, labels or annotations of the workload is not evaluated; a change to the Pod template (an image, or `kubectl rollout restart`) is.
 - It is feedback, not the security boundary: if the operator is unavailable the apply goes through, and every Pod is still validated when it is created.
-- It cannot see what the operator adds to Pods later (`mandatoryLabels`) or per-Pod names, so a policy that selects on those is only enforced at Pod admission.
+- It evaluates the Pod template, not the final Pod: it cannot see what the operator or other webhooks (for example a service mesh injecting sidecars) add to Pods later, or per-Pod names, so a policy that depends on those is only enforced at Pod admission. Closing these gaps is planned (see the project backlog, `HU-02.4`).
 
 If a rollout still makes no progress, check `kubectl describe rs` and the namespace events: Pod admission is the final check.
 
@@ -441,7 +441,10 @@ The suite uses its own kubeconfig (`bin/e2e-kubeconfig`) and refuses to run agai
 
 ## 11. Known limitations
 
-- Only Pods are enforced. `Deployment` and `StatefulSet` get early feedback (warnings by default); `DaemonSet`, `Job` and `CronJob` do not, and are validated when their Pods are created.
+- Only Pods are enforced. `Deployment` and `StatefulSet` get early feedback (warnings by default); `DaemonSet`, `Job` and `CronJob` do not yet, and are validated when their Pods are created.
+- Workloads that were already running when a policy was created are not re-evaluated; the early check only looks at template changes. A continuous audit of existing workloads is planned (`HU-02.5`).
+- Warnings are informational. To make them a change-control gate, fail your pipeline when `kubectl apply --dry-run=server` prints `Warning: [early]` (a ready-made script is planned, `TASK-02.6.9`).
+- Pods created by controllers outside Kubernetes (for example Argo Rollouts) get no early feedback; Pod admission validates them.
 - Ephemeral containers (`kubectl debug`) are added through a subresource that the webhooks do not intercept.
 - `mandatoryLabels` are added to Pods, not to their owning workloads.
 - ISO/IEC 27001 control references in messages are an interpretation pending confirmation by your ISMS owner. Treat them as traceability hints, not as audit evidence.

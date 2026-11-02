@@ -61,34 +61,53 @@ vet: ## Run go vet against code.
 test: manifests generate fmt vet setup-envtest ## Run tests.
 	KUBEBUILDER_ASSETS="$(shell "$(ENVTEST)" use $(ENVTEST_K8S_VERSION) --bin-dir "$(LOCALBIN)" -p path)" go test $$(go list ./... | grep -v /e2e) -coverprofile cover.out
 
-# TODO(user): To use a different vendor for e2e tests, modify the setup under 'tests/e2e'.
-# The default setup assumes Kind is pre-installed and builds/loads the Manager Docker image locally.
-# CertManager is installed by default; skip with:
-# - CERT_MANAGER_INSTALL_SKIP=true
+# E2E tests run on a disposable, multi-node Kind cluster (Docker Desktop or any Docker
+# engine). The cluster gets its OWN kubeconfig ($(E2E_KUBECONFIG)): your ~/.kube/config
+# and its current context are never read or changed, and the suite refuses to run
+# against any context other than kind-$(KIND_CLUSTER).
+#
+#   make test-e2e                  create cluster, run, delete cluster
+#   make test-e2e E2E_KEEP=true    keep the cluster afterwards (inspect / iterate)
+#   make test-e2e-run              re-run against an existing cluster
+#   make cleanup-test-e2e          delete the cluster
+#
+# Options: KIND_NODE_IMAGE=kindest/node:v1.30.x tests the minimum supported version;
+# CERT_MANAGER_INSTALL_SKIP=true skips installing cert-manager.
 KIND_CLUSTER ?= platform-governance-operator-test-e2e
+KIND_CONFIG ?= test/e2e/kind-config.yaml
+KIND_NODE_IMAGE ?=
+E2E_KUBECONFIG ?= $(LOCALBIN)/e2e-kubeconfig
+E2E_KEEP ?= false
+E2E_ENV = KUBECONFIG="$(E2E_KUBECONFIG)" KIND="$(KIND)" KIND_CLUSTER="$(KIND_CLUSTER)"
 
 .PHONY: setup-test-e2e
-setup-test-e2e: ## Set up a Kind cluster for e2e tests if it does not exist
-	@command -v $(KIND) >/dev/null 2>&1 || { \
-		echo "Kind is not installed. Please install Kind manually."; \
-		exit 1; \
-	}
-	@case "$$($(KIND) get clusters)" in \
+setup-test-e2e: kind ## Set up an isolated multi-node Kind cluster for e2e tests if it does not exist
+	@docker info >/dev/null 2>&1 || { echo "Docker is not running. Start Docker Desktop first."; exit 1; }
+	@case "$$("$(KIND)" get clusters 2>/dev/null)" in \
 		*"$(KIND_CLUSTER)"*) \
-			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Skipping creation." ;; \
+			echo "Kind cluster '$(KIND_CLUSTER)' already exists. Refreshing $(E2E_KUBECONFIG)."; \
+			"$(KIND)" export kubeconfig --name "$(KIND_CLUSTER)" --kubeconfig "$(E2E_KUBECONFIG)" ;; \
 		*) \
-			echo "Creating Kind cluster '$(KIND_CLUSTER)'..."; \
-			$(KIND) create cluster --name $(KIND_CLUSTER) ;; \
+			echo "Creating Kind cluster '$(KIND_CLUSTER)' ($(KIND_CONFIG))..."; \
+			"$(KIND)" create cluster --name "$(KIND_CLUSTER)" --config "$(KIND_CONFIG)" \
+				--kubeconfig "$(E2E_KUBECONFIG)" --wait 120s \
+				$(if $(KIND_NODE_IMAGE),--image "$(KIND_NODE_IMAGE)",) ;; \
 	esac
 
 .PHONY: test-e2e
-test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests. Expected an isolated environment using Kind.
-	KIND=$(KIND) KIND_CLUSTER=$(KIND_CLUSTER) go test -tags=e2e ./test/e2e/ -v -ginkgo.v
-	$(MAKE) cleanup-test-e2e
+test-e2e: setup-test-e2e manifests generate fmt vet ## Run the e2e tests on an isolated Kind cluster (deleted afterwards unless E2E_KEEP=true).
+	@status=0; $(E2E_ENV) go test -tags=e2e ./test/e2e/ -v -ginkgo.v -timeout 30m || status=$$?; \
+	if [ "$(E2E_KEEP)" != "true" ]; then $(MAKE) cleanup-test-e2e; \
+	else echo "Cluster kept. Use: export KUBECONFIG=$(E2E_KUBECONFIG)"; fi; \
+	exit $$status
+
+.PHONY: test-e2e-run
+test-e2e-run: manifests generate fmt vet ## Re-run the e2e tests against the existing Kind cluster.
+	$(E2E_ENV) go test -tags=e2e ./test/e2e/ -v -ginkgo.v -timeout 30m
 
 .PHONY: cleanup-test-e2e
-cleanup-test-e2e: ## Tear down the Kind cluster used for e2e tests
-	@$(KIND) delete cluster --name $(KIND_CLUSTER)
+cleanup-test-e2e: kind ## Tear down the Kind cluster used for e2e tests
+	@"$(KIND)" delete cluster --name "$(KIND_CLUSTER)" --kubeconfig "$(E2E_KUBECONFIG)"
 
 .PHONY: lint
 lint: golangci-lint ## Run golangci-lint linter
@@ -180,7 +199,7 @@ $(LOCALBIN):
 
 ## Tool Binaries
 KUBECTL ?= kubectl
-KIND ?= kind
+KIND ?= $(LOCALBIN)/kind
 KUSTOMIZE ?= $(LOCALBIN)/kustomize
 CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen
 ENVTEST ?= $(LOCALBIN)/setup-envtest
@@ -201,6 +220,12 @@ ENVTEST_K8S_VERSION ?= $(shell v='$(call gomodver,k8s.io/api)'; \
   printf '%s\n' "$$v" | sed -E 's/^v?[0-9]+\.([0-9]+).*/1.\1/')
 
 GOLANGCI_LINT_VERSION ?= v2.15.0
+KIND_VERSION ?= v0.33.0
+.PHONY: kind
+kind: $(KIND) ## Download kind locally if necessary.
+$(KIND): $(LOCALBIN)
+	$(call go-install-tool,$(KIND),sigs.k8s.io/kind,$(KIND_VERSION))
+
 .PHONY: kustomize
 kustomize: $(KUSTOMIZE) ## Download kustomize locally if necessary.
 $(KUSTOMIZE): $(LOCALBIN)

@@ -1,0 +1,8 @@
+# Disposable e2e cluster: one control plane and two workers, so the operator's two
+# replicas can land on different nodes (anti-affinity, PDB, replica-down scenarios).
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+- role: worker
+- role: worker

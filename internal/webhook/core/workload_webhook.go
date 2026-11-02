@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"os"
 	"slices"
@@ -122,9 +123,20 @@ func (v *WorkloadValidator) Handle(ctx context.Context, req admission.Request) a
 		}
 	}
 
+	// Pod admission validates the Pod after the mutating webhook has run, so evaluate the
+	// template with this operator's defaults applied (mandatory labels, resources, OTel
+	// variables). Policies are selected with the labels before mutation, as the mutator
+	// does, and baselines with the labels after it, as the validator does.
 	pod := podFromTemplate(current.pod, req.Namespace)
-	governor := Governor{Client: v.Client, OperatorNamespace: v.OperatorNamespace}
-	findings, err := governor.Evaluate(ctx, req.Namespace, pod, current.subject)
+	subject := current.subject
+	defaulter := Defaulter{Client: v.Client}
+	_, err = defaulter.Apply(ctx, req.Namespace, pod, subject)
+	var findings []Finding
+	if err == nil {
+		subject.Labels = pod.Labels
+		governor := Governor{Client: v.Client, OperatorNamespace: v.OperatorNamespace}
+		findings, err = governor.Evaluate(ctx, req.Namespace, pod, subject)
+	}
 	if err != nil {
 		// The early check is only feedback and the webhook fails open: do not block
 		// the apply because policy could not be read; Pod admission decides later.
@@ -229,8 +241,8 @@ func podFromTemplate(tpl corev1.PodTemplateSpec, namespace string) *corev1.Pod {
 	return &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Namespace:   namespace,
-			Labels:      tpl.Labels,
-			Annotations: tpl.Annotations,
+			Labels:      maps.Clone(tpl.Labels),
+			Annotations: maps.Clone(tpl.Annotations),
 		},
 		Spec: *tpl.Spec.DeepCopy(),
 	}

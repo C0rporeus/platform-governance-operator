@@ -329,7 +329,7 @@ deployment.apps/web configured
 - The default mode is `warn`: you see the warnings and the workload is still applied. Platform teams can switch to `enforce` (`--early-validation-mode=enforce`) once the warnings are gone; then the apply is rejected for the violations Pod admission would reject. `off` disables it.
 - Changing only replicas, labels or annotations of the workload is not evaluated; a change to the Pod template (an image, or `kubectl rollout restart`) is.
 - It is feedback, not the security boundary: if the operator is unavailable the apply goes through, and every Pod is still validated when it is created.
-- It evaluates the Pod template, not the final Pod: it cannot see what the operator or other webhooks (for example a service mesh injecting sidecars) add to Pods later, or per-Pod names, so a policy that depends on those is only enforced at Pod admission. Closing these gaps is planned (see the project backlog, `HU-02.4`).
+- It evaluates the Pod template with the operator's own defaults applied (mandatory labels, resources, tracing variables), so a baseline that selects on a mandatory label applies as it will to the Pods. It cannot see what other webhooks (for example a service mesh injecting sidecars) add, or per-Pod names, so a policy that depends on those is only enforced at Pod admission. Closing these gaps is planned (see the project backlog, `HU-02.4`).
 
 If a rollout still makes no progress, check `kubectl describe rs` and the namespace events: Pod admission is the final check.
 

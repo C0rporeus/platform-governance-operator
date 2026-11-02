@@ -21,12 +21,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 	"unicode/utf8"
 
+	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -676,5 +678,108 @@ func TestWorkloadValidatorMatchesTargetingForDaemonSetsAndJobs(t *testing.T) {
 		if resp.Allowed == c.wantDeny {
 			t.Errorf("%s: allowed = %v, want denied = %v", c.name, resp.Allowed, c.wantDeny)
 		}
+	}
+}
+
+// podAdmission runs a Pod through the real mutating webhook, applies its JSON patch, and
+// validates the result: what the API server does with a Pod.
+func podAdmission(t *testing.T, pod *corev1.Pod, objs ...client.Object) admission.Response {
+	t.Helper()
+	scheme := newWebhookTestScheme(t)
+	c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+	decoder := admission.NewDecoder(scheme)
+	mutator := &PodMutator{Client: c, Recorder: record.NewFakeRecorder(50), decoder: decoder}
+	validator := &PodValidator{Client: c, Recorder: record.NewFakeRecorder(50), decoder: decoder}
+
+	mutation := mutator.Handle(context.Background(), requestWith(t, pod, reqOpts{operation: admissionv1.Create}))
+	if !mutation.Allowed {
+		t.Fatalf("the mutating webhook rejected the Pod: %+v", mutation)
+	}
+	original, err := json.Marshal(pod)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mutatedRaw := original
+	if len(mutation.Patches) > 0 {
+		operations, err := json.Marshal(mutation.Patches)
+		if err != nil {
+			t.Fatal(err)
+		}
+		patch, err := jsonpatch.DecodePatch(operations)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mutatedRaw, err = patch.Apply(original); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mutated := &corev1.Pod{}
+	if err := json.Unmarshal(mutatedRaw, mutated); err != nil {
+		t.Fatal(err)
+	}
+	return validator.Handle(context.Background(), requestWith(t, mutated, reqOpts{operation: admissionv1.Create}))
+}
+
+// G1: a baseline that selects on a label that only this operator's mutator adds. Pod
+// admission sees the label (the mutator runs first); the early check must too.
+func TestEarlyValidationSeesTheLabelsThePodMutatorAdds(t *testing.T) {
+	t.Parallel()
+	labeller := &platformv1alpha1.WorkloadPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-label", Namespace: testNamespace},
+		Spec: platformv1alpha1.WorkloadPolicySpec{
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{"team": "platform"},
+		},
+	}
+	teamBaseline := rootBaseline()
+	teamBaseline.Name = "platform-team"
+	teamBaseline.Spec.Selector = &metav1.LabelSelector{MatchLabels: map[string]string{"team": "platform"}}
+
+	for name, objs := range map[string][]client.Object{
+		"with the policy that adds the label":    {labeller, teamBaseline},
+		"without it the baseline does not apply": {teamBaseline},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			spec := violatingPod().Spec
+			podResp := podAdmission(t, &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: "web-0", Labels: map[string]string{"app": "web"}}, Spec: spec}, objs...)
+
+			scheme := newWebhookTestScheme(t)
+			early := &WorkloadValidator{
+				Client:   fake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build(),
+				Recorder: record.NewFakeRecorder(50), Mode: EarlyValidationEnforce, decoder: admission.NewDecoder(scheme),
+			}
+			earlyResp := early.Handle(context.Background(),
+				workloadRequest(t, admissionv1.Create, "Deployment", deploymentOf("web", spec), workloadRequestOpts{}))
+
+			if podResp.Allowed != earlyResp.Allowed {
+				t.Fatalf("verdicts differ: Pod admission allowed=%v, early validation allowed=%v", podResp.Allowed, earlyResp.Allowed)
+			}
+			if len(objs) == 2 && podResp.Allowed {
+				t.Fatal("the label added by the mutator must bring the team baseline in, in both paths")
+			}
+		})
+	}
+}
+
+func TestEarlyValidationDoesNotMutateTheWorkloadItReceived(t *testing.T) {
+	t.Parallel()
+	labeller := &platformv1alpha1.WorkloadPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "team-label", Namespace: testNamespace},
+		Spec: platformv1alpha1.WorkloadPolicySpec{
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{"team": "platform"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "100m"},
+		},
+	}
+	v := newWorkloadValidator(t, EarlyValidationWarn, record.NewFakeRecorder(10), labeller, rootBaseline())
+	web := deploymentOf("web", violatingPod().Spec)
+	before := web.DeepCopy()
+
+	resp := v.Handle(context.Background(), workloadRequest(t, admissionv1.Create, "Deployment", web, workloadRequestOpts{}))
+
+	if !resp.Allowed || len(resp.Patches) != 0 {
+		t.Fatalf("the early check only reports, it never patches; got %+v", resp)
+	}
+	if !reflect.DeepEqual(before, web) {
+		t.Fatal("the request object was modified")
 	}
 }

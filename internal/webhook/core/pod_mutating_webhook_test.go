@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -18,9 +20,6 @@ import (
 func TestPodMutatorApplyTelemetryUsesHighestPriorityFirst(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{
-		Recorder: record.NewFakeRecorder(10),
-	}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "app"}},
@@ -46,7 +45,7 @@ func TestPodMutatorApplyTelemetryUsesHighestPriorityFirst(t *testing.T) {
 	}
 
 	profiles, _ = policyresolver.Select(profiles, policyresolver.Subject{}, telemetryProfileCandidate)
-	mutated := mutator.applyTelemetry(pod, profiles, false)
+	mutated := len(applyTelemetry(pod, profiles)) > 0
 	if !mutated {
 		t.Fatalf("expected pod to be mutated")
 	}
@@ -65,9 +64,6 @@ func TestPodMutatorApplyTelemetryUsesHighestPriorityFirst(t *testing.T) {
 func TestPodMutatorApplyPolicyResourcesRejectsInvalidQuantity(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{
-		Recorder: record.NewFakeRecorder(10),
-	}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "app"}},
@@ -80,7 +76,7 @@ func TestPodMutatorApplyPolicyResourcesRejectsInvalidQuantity(t *testing.T) {
 		},
 	}
 
-	_, err := mutator.applyPolicyResources(pod, policy)
+	_, err := applyPolicyResources(pod, policy)
 	if err == nil {
 		t.Fatalf("expected invalid quantity error")
 	}
@@ -89,7 +85,6 @@ func TestPodMutatorApplyPolicyResourcesRejectsInvalidQuantity(t *testing.T) {
 func TestPodMutatorApplyLabelsInjectsAndDoesNotOverride(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Labels: map[string]string{"existing": "keep-me"},
@@ -105,7 +100,7 @@ func TestPodMutatorApplyLabelsInjectsAndDoesNotOverride(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyPolicyLabels(pod, policy)
+	mutated := applyPolicyLabels(pod, policy)
 	if !mutated {
 		t.Fatalf("expected labels to be mutated")
 	}
@@ -120,7 +115,6 @@ func TestPodMutatorApplyLabelsInjectsAndDoesNotOverride(t *testing.T) {
 func TestPodMutatorApplyLabelsNilLabelsMap(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{}
 	policy := &platformv1alpha1.WorkloadPolicy{
 		ObjectMeta: metav1.ObjectMeta{Name: "policy"},
@@ -129,7 +123,7 @@ func TestPodMutatorApplyLabelsNilLabelsMap(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyPolicyLabels(pod, policy)
+	mutated := applyPolicyLabels(pod, policy)
 	if !mutated {
 		t.Fatalf("expected labels to be mutated")
 	}
@@ -141,7 +135,6 @@ func TestPodMutatorApplyLabelsNilLabelsMap(t *testing.T) {
 func TestPodMutatorApplyResourcesHappyPath(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -158,7 +151,7 @@ func TestPodMutatorApplyResourcesHappyPath(t *testing.T) {
 		},
 	}
 
-	mutated, err := mutator.applyPolicyResources(pod, policy)
+	mutated, err := applyPolicyResources(pod, policy)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,7 +175,6 @@ func TestPodMutatorApplyResourcesHappyPath(t *testing.T) {
 func TestPodMutatorApplyResourcesDoesNotOverrideExisting(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -204,7 +196,7 @@ func TestPodMutatorApplyResourcesDoesNotOverrideExisting(t *testing.T) {
 		},
 	}
 
-	mutated, err := mutator.applyPolicyResources(pod, policy)
+	mutated, err := applyPolicyResources(pod, policy)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -332,7 +324,6 @@ func TestPodMutatorHandleSkipsInvalidPolicyAndAppliesValid(t *testing.T) {
 func TestPodMutatorTelemetryDoesNotOverrideExistingEnvVars(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -356,7 +347,7 @@ func TestPodMutatorTelemetryDoesNotOverrideExistingEnvVars(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles, false)
+	mutated := len(applyTelemetry(pod, profiles)) > 0
 	if mutated {
 		t.Fatalf("expected no mutation when env var already exists")
 	}
@@ -399,7 +390,6 @@ func TestPodMutatorEmptyContainersList(t *testing.T) {
 func TestPodMutatorApplyTelemetrySkipsInitContainers(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{
@@ -421,7 +411,7 @@ func TestPodMutatorApplyTelemetrySkipsInitContainers(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles, false)
+	mutated := len(applyTelemetry(pod, profiles)) > 0
 	if !mutated {
 		t.Fatalf("expected pod to be mutated (regular container got env vars)")
 	}
@@ -440,7 +430,6 @@ func TestPodMutatorApplyTelemetrySkipsInitContainers(t *testing.T) {
 func TestPodMutatorApplyOnlyDefaultLimits(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "app"}},
@@ -454,7 +443,7 @@ func TestPodMutatorApplyOnlyDefaultLimits(t *testing.T) {
 		},
 	}
 
-	mutated, err := mutator.applyPolicyResources(pod, policy)
+	mutated, err := applyPolicyResources(pod, policy)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -475,7 +464,6 @@ func TestPodMutatorApplyOnlyDefaultLimits(t *testing.T) {
 func TestPodMutatorApplyTelemetryInjectEnvVarsFalseSkips(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "app"}},
@@ -491,7 +479,7 @@ func TestPodMutatorApplyTelemetryInjectEnvVarsFalseSkips(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles, false)
+	mutated := len(applyTelemetry(pod, profiles)) > 0
 	if mutated {
 		t.Fatalf("expected no mutation when InjectEnvVars is false")
 	}
@@ -503,7 +491,6 @@ func TestPodMutatorApplyTelemetryInjectEnvVarsFalseSkips(t *testing.T) {
 func TestPodMutatorApplyTelemetryEmptyEndpointSkips(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "app"}},
@@ -519,7 +506,7 @@ func TestPodMutatorApplyTelemetryEmptyEndpointSkips(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles, false)
+	mutated := len(applyTelemetry(pod, profiles)) > 0
 	if mutated {
 		t.Fatalf("expected no mutation when TracingEndpoint is empty")
 	}
@@ -528,7 +515,6 @@ func TestPodMutatorApplyTelemetryEmptyEndpointSkips(t *testing.T) {
 func TestPodMutatorApplyTelemetrySamplingRateNotInjectedWhenEmpty(t *testing.T) {
 	t.Parallel()
 
-	mutator := &PodMutator{Recorder: record.NewFakeRecorder(10)}
 	pod := &corev1.Pod{
 		Spec: corev1.PodSpec{
 			Containers: []corev1.Container{{Name: "app"}},
@@ -545,7 +531,7 @@ func TestPodMutatorApplyTelemetrySamplingRateNotInjectedWhenEmpty(t *testing.T) 
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles, false)
+	mutated := len(applyTelemetry(pod, profiles)) > 0
 	if !mutated {
 		t.Fatalf("expected mutation (endpoint env var should be injected)")
 	}
@@ -609,5 +595,37 @@ func TestSelectOrdersWorkloadPoliciesByPriority(t *testing.T) {
 	if policies[0].Name != "high" || policies[1].Name != "mid" || policies[2].Name != "low" {
 		t.Fatalf("expected descending priority order, got %s, %s, %s",
 			policies[0].Name, policies[1].Name, policies[2].Name)
+	}
+}
+
+// The valid half of a policy must not be lost because its resource defaults are
+// invalid: the labels were applied to the Pod, but the change was not reported, and
+// when it was the only one the webhook sent no patch at all.
+func TestPodMutatorKeepsLabelsWhenTheSamePolicyHasInvalidResourceDefaults(t *testing.T) {
+	t.Parallel()
+
+	scheme := newWebhookTestScheme(t)
+	mixed := &platformv1alpha1.WorkloadPolicy{
+		ObjectMeta: metav1.ObjectMeta{Name: "mixed", Namespace: "team-a"},
+		Spec: platformv1alpha1.WorkloadPolicySpec{
+			MandatoryLabels: map[string]platformv1alpha1.LabelValueString{"team": "platform"},
+			DefaultRequests: map[string]platformv1alpha1.QuantityString{"cpu": "not-a-quantity"},
+		},
+	}
+	mutator := &PodMutator{
+		Client:   fake.NewClientBuilder().WithScheme(scheme).WithObjects(mixed).Build(),
+		Recorder: record.NewFakeRecorder(10),
+		decoder:  admission.NewDecoder(scheme),
+	}
+
+	resp := mutator.Handle(context.Background(), newAdmissionRequest(t, &corev1.Pod{
+		Spec: corev1.PodSpec{Containers: []corev1.Container{{Name: "app"}}},
+	}))
+
+	if !resp.Allowed || len(resp.Patches) == 0 {
+		t.Fatalf("the valid labels must still be sent as a patch, got %+v", resp)
+	}
+	if !strings.Contains(fmt.Sprint(resp.Patches), "platform") {
+		t.Fatalf("the patch does not carry the team label: %v", resp.Patches)
 	}
 }

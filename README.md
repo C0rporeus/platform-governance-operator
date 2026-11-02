@@ -175,6 +175,7 @@ To run end-to-end tests locally using `kind`:
 
 ## Documentation
 
+- [Technical user guide](./docs/USER-GUIDE.md): installation, policy model, Audit → Warn → Enforce adoption, recipes, operations, troubleshooting and local trial on Docker Desktop
 - [Good practices evidence and design basis](./docs/GOOD-PRACTICES-EVIDENCE.md): the researched practices (Kubernetes / CNCF, OpenSSF, Google, AWS Well-Architected, ISO 27001) behind the design, the source register with verification levels, the decisions they informed, declared deviations and traceability to tests
 - [Architecture Decision Records (ADRs)](./docs/adrs/)
 - [Blog: Designing Platform Contracts with CRDs](./docs/blog/01-designing-platform-contracts-with-crds.md)

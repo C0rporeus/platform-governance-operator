@@ -50,7 +50,7 @@ func (v *PodValidator) InjectDecoder(d admission.Decoder) error {
 	return nil
 }
 
-// +kubebuilder:webhook:path=/validate-core-v1-pod,mutating=false,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create;update,versions=v1,name=vpod.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-core-v1-pod,mutating=false,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups="",resources=pods,verbs=create;update,versions=v1,name=vpod.kb.io,admissionReviewVersions=v1
 
 // Handle validates an incoming Pod admission request against all SecurityBaselines
 // active in the request namespace. Returns Denied if any baseline rule is violated.

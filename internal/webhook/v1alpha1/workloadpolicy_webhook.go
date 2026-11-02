@@ -40,7 +40,7 @@ func SetupWorkloadPolicyWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-workloadpolicy,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=workloadpolicies,verbs=create;update,versions=v1alpha1,name=mworkloadpolicy-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-workloadpolicy,mutating=true,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups=core.platform.f3nr1r.io,resources=workloadpolicies,verbs=create;update,versions=v1alpha1,name=mworkloadpolicy-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // WorkloadPolicyCustomDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind WorkloadPolicy when those are created or updated.
@@ -68,7 +68,7 @@ func (d *WorkloadPolicyCustomDefaulter) Default(_ context.Context, obj *corev1al
 	return nil
 }
 
-// +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-workloadpolicy,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=workloadpolicies,verbs=create;update,versions=v1alpha1,name=vworkloadpolicy-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-workloadpolicy,mutating=false,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups=core.platform.f3nr1r.io,resources=workloadpolicies,verbs=create;update,versions=v1alpha1,name=vworkloadpolicy-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // WorkloadPolicyCustomValidator struct is responsible for validating the WorkloadPolicy resource
 // when it is created, updated, or deleted.

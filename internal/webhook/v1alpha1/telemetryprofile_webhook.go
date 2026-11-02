@@ -40,7 +40,7 @@ func SetupTelemetryProfileWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-telemetryprofile,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=telemetryprofiles,verbs=create;update,versions=v1alpha1,name=mtelemetryprofile-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-telemetryprofile,mutating=true,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups=core.platform.f3nr1r.io,resources=telemetryprofiles,verbs=create;update,versions=v1alpha1,name=mtelemetryprofile-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // TelemetryProfileCustomDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind TelemetryProfile when those are created or updated.
@@ -55,7 +55,7 @@ func (d *TelemetryProfileCustomDefaulter) Default(_ context.Context, obj *corev1
 	return nil
 }
 
-// +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-telemetryprofile,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=telemetryprofiles,verbs=create;update,versions=v1alpha1,name=vtelemetryprofile-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-telemetryprofile,mutating=false,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups=core.platform.f3nr1r.io,resources=telemetryprofiles,verbs=create;update,versions=v1alpha1,name=vtelemetryprofile-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // TelemetryProfileCustomValidator struct is responsible for validating the TelemetryProfile resource
 // when it is created, updated, or deleted.

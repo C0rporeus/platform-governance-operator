@@ -1,3 +1,11 @@
+# Exclude system namespaces, cert-manager and the operator's own namespace from the
+# Pod webhooks. Without the last two, a cold install or a rescheduled operator Pod is
+# rejected by the very webhook it is trying to start (failurePolicy: Fail), and the
+# operator can never come up. Names are matched on the immutable
+# kubernetes.io/metadata.name label, not on labels a tenant could edit. The operator
+# namespace below must equal `namespace:` in config/default/kustomization.yaml
+# (enforced by test/manifests).
+#
 # Exclude system namespaces from Pod webhooks to avoid blocking critical
 # control-plane workloads. CRD webhooks (SecurityBaseline, WorkloadPolicy,
 # TelemetryProfile) are not patched because platform teams intentionally
@@ -19,6 +27,8 @@ webhooks:
       - kube-system
       - kube-public
       - kube-node-lease
+      - cert-manager
+      - platform-governance-operator-system
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -34,3 +44,5 @@ webhooks:
       - kube-system
       - kube-public
       - kube-node-lease
+      - cert-manager
+      - platform-governance-operator-system

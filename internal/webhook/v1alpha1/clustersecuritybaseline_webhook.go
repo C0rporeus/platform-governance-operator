@@ -37,7 +37,7 @@ func SetupClusterSecurityBaselineWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-clustersecuritybaseline,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=clustersecuritybaselines,verbs=create;update,versions=v1alpha1,name=vclustersecuritybaseline-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-clustersecuritybaseline,mutating=false,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups=core.platform.f3nr1r.io,resources=clustersecuritybaselines,verbs=create;update,versions=v1alpha1,name=vclustersecuritybaseline-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // ClusterSecurityBaselineCustomValidator validates ClusterSecurityBaseline resources.
 // An invalid namespaceSelector would silently leave namespaces unprotected, so it is

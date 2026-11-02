@@ -23,6 +23,7 @@ webhooks:
     resources:
     - pods
   sideEffects: None
+  timeoutSeconds: 5
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -43,6 +44,7 @@ webhooks:
     resources:
     - securitybaselines
   sideEffects: None
+  timeoutSeconds: 5
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -63,6 +65,7 @@ webhooks:
     resources:
     - telemetryprofiles
   sideEffects: None
+  timeoutSeconds: 5
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -83,6 +86,7 @@ webhooks:
     resources:
     - workloadpolicies
   sideEffects: None
+  timeoutSeconds: 5
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -109,6 +113,7 @@ webhooks:
     resources:
     - clustersecuritybaselines
   sideEffects: None
+  timeoutSeconds: 5
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -129,6 +134,7 @@ webhooks:
     resources:
     - pods
   sideEffects: None
+  timeoutSeconds: 5
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -149,6 +155,7 @@ webhooks:
     resources:
     - securitybaselines
   sideEffects: None
+  timeoutSeconds: 5
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -169,6 +176,7 @@ webhooks:
     resources:
     - telemetryprofiles
   sideEffects: None
+  timeoutSeconds: 5
 - admissionReviewVersions:
   - v1
   clientConfig:
@@ -189,3 +197,4 @@ webhooks:
     resources:
     - workloadpolicies
   sideEffects: None
+  timeoutSeconds: 5

@@ -32,7 +32,7 @@ func (m *PodMutator) InjectDecoder(d admission.Decoder) error {
 	return nil
 }
 
-// +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create,versions=v1,name=mpod.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups="",resources=pods,verbs=create,versions=v1,name=mpod.kb.io,admissionReviewVersions=v1
 
 // Handle mutates an incoming Pod admission request by applying defaults from
 // WorkloadPolicy (labels, resource requests/limits) and injecting telemetry

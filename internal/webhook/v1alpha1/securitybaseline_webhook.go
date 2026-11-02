@@ -39,7 +39,7 @@ func SetupSecurityBaselineWebhookWithManager(mgr ctrl.Manager) error {
 		Complete()
 }
 
-// +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-securitybaseline,mutating=true,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=create;update,versions=v1alpha1,name=msecuritybaseline-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-core-platform-f3nr1r-io-v1alpha1-securitybaseline,mutating=true,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=create;update,versions=v1alpha1,name=msecuritybaseline-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // SecurityBaselineCustomDefaulter struct is responsible for setting default values on the custom resource of the
 // Kind SecurityBaseline when those are created or updated.
@@ -54,7 +54,7 @@ func (d *SecurityBaselineCustomDefaulter) Default(_ context.Context, obj *corev1
 	return nil
 }
 
-// +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-securitybaseline,mutating=false,failurePolicy=fail,sideEffects=None,groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=create;update,versions=v1alpha1,name=vsecuritybaseline-v1alpha1.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-core-platform-f3nr1r-io-v1alpha1-securitybaseline,mutating=false,failurePolicy=fail,sideEffects=None,timeoutSeconds=5,groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=create;update,versions=v1alpha1,name=vsecuritybaseline-v1alpha1.kb.io,admissionReviewVersions=v1
 
 // SecurityBaselineCustomValidator struct is responsible for validating the SecurityBaseline resource
 // when it is created, updated, or deleted.

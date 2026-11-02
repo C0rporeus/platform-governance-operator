@@ -1,0 +1,17 @@
+# Keeps one admission replica available during voluntary disruptions such as node drains.
+# The Pod webhooks use failurePolicy: Fail (ADR-0002), so losing every replica blocks Pod creation.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: controller-manager
+  namespace: system
+  labels:
+    control-plane: controller-manager
+    app.kubernetes.io/name: platform-governance-operator
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      app.kubernetes.io/name: platform-governance-operator

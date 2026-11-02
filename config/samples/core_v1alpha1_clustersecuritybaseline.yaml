@@ -1,6 +1,12 @@
 # Corporate baseline applied to every namespace except kube-system, kube-public,
 # cert-manager, the operator namespace and the ones listed in excludedNamespaces.
 # Namespaced SecurityBaselines add to it; they cannot relax it.
+#
+# Exempt namespaces by NAME (excludedNamespaces), not by a mutable label.
+# Anyone allowed to `patch` a Namespace can add or change labels, so a selector
+# such as "label NotIn [exempt]" would let them opt out of the baseline. If you
+# need a namespaceSelector, match on the immutable `kubernetes.io/metadata.name`
+# label and restrict `patch` on namespaces with RBAC.
 apiVersion: core.platform.f3nr1r.io/v1alpha1
 kind: ClusterSecurityBaseline
 metadata:
@@ -11,10 +17,5 @@ spec:
   readOnlyRootFilesystem: true
   disallowPrivileged: true
   disallowPrivilegeEscalation: true
-  namespaceSelector:
-    matchExpressions:
-    - key: platform.f3nr1r.io/baseline
-      operator: NotIn
-      values: ["exempt"]
   excludedNamespaces:
   - monitoring

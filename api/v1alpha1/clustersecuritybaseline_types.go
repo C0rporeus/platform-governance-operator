@@ -30,6 +30,9 @@ type ClusterSecurityBaselineSpec struct {
 
 	// NamespaceSelector limits the baseline to namespaces whose labels match.
 	// When omitted the baseline applies to every namespace that is not excluded.
+	// Namespace labels are mutable: anyone allowed to patch a Namespace can change them
+	// and leave the selector. Prefer excludedNamespaces for exemptions, or match on the
+	// immutable kubernetes.io/metadata.name label, and restrict patch on namespaces with RBAC.
 	// +optional
 	NamespaceSelector *metav1.LabelSelector `json:"namespaceSelector,omitempty"`
 }

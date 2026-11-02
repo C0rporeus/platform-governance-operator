@@ -279,6 +279,14 @@ var _ = Describe("FooController", func() {
 - CRDs loaded from `config/crd/bases/` by envtest (requires `make manifests` first)
 - Black-box tests import the controller package: `controller.WorkloadPolicyReconciler{...}`
 
+## End-to-end tests (`test/e2e/`, build tag `e2e`)
+
+- `make test-e2e` creates a disposable 3-node Kind cluster (`test/e2e/kind-config.yaml`) on Docker, runs the suite and deletes it; `E2E_KEEP=true` keeps it, `make test-e2e-run` re-runs against it, `make cleanup-test-e2e` deletes it. Kind is pinned (`KIND_VERSION`) and installed in `bin/`.
+- **Isolation:** the cluster has its own kubeconfig (`bin/e2e-kubeconfig`); `~/.kube/config` is never read or modified. `BeforeSuite` aborts unless `KUBECONFIG` is that file and the context is `kind-$(KIND_CLUSTER)`. Never point the suite at a shared cluster: it installs `failurePolicy: Fail` webhooks and cluster-wide baselines.
+- The operator is deployed once in `BeforeSuite` (Ginkgo may reorder top-level containers). Each `Describe` uses its own namespaces and deletes every cluster-scoped object it creates (`DeferCleanup`).
+- Test Pods use `registry.k8s.io/pause:3.10` (preloaded on Kind nodes, runs as non-root) and server-side dry runs where nothing needs to persist.
+- Scenarios: denial message (rule, ISO control, policy), events in workload namespaces, Warn + dry-run without events, metadata-only updates, defaults/telemetry injection, managed HPA and opt-out, cluster baseline inheritance and exclusion, HA (2 replicas on distinct nodes, PDB, replica loss without fail-open, self-restart and cert-manager restart under a lockdown baseline).
+
 ## Development rule
 
 **A defect found is fixed in the same change, not deferred.** Fix it with a regression test that fails without the fix, run `make test` and `make lint`, then record it as done. Defer only when the fix needs a decision or input that is not available, and say what blocks it.
@@ -311,7 +319,7 @@ Every policy kind embeds `PolicyTargeting` (`targetRef` | `selector`; neither = 
 
 - Cluster-scoped CRD; its spec embeds `SecurityBaselineSpec` (all rules, `enforcementAction`, `excludedNamespaces`) and adds `namespaceSelector`. `targetRef` is rejected (CEL on the CRD + validating webhook); the inherited `selector` matches Pod labels.
 - **Inheritance is additive:** `PodValidator.applicableBaselines` evaluates cluster baselines first, then the namespace's `SecurityBaseline`s. A namespaced baseline can add rules but never relax a cluster one (each baseline keeps its own `enforcementAction`).
-- **Default exclusions** (never governed by a cluster baseline): `kube-system`, `kube-public`, `cert-manager`, the operator namespace (`POD_NAMESPACE` env, set via downward API in `config/manager/manager.yaml`) and the baseline's `excludedNamespaces`. This is evaluation-level only; excluding them from the webhook *configuration* (the real anti-deadlock guard with `failurePolicy: Fail`) is `HU-03.2`.
+- **Default exclusions** (never governed by a cluster baseline): `kube-system`, `kube-public`, `cert-manager`, the operator namespace (`POD_NAMESPACE` env, set via downward API in `config/manager/manager.yaml`) and the baseline's `excludedNamespaces`. The Pod webhook *configuration* also excludes them (plus `kube-node-lease`) by the immutable `kubernetes.io/metadata.name` label (PRE-02.3, see `config/webhook/patches/namespace-selector.yaml`), which is the real anti-deadlock guard with `failurePolicy: Fail`; `test/manifests` and the e2e availability specs protect it.
 - **Fail closed:** if a `namespaceSelector` is set and the Namespace cannot be read, the validator returns 500 instead of skipping the baseline. An invalid `namespaceSelector` is rejected at write time; if one still reaches admission it is logged and skipped.
 - RBAC: the manager needs `get/list/watch` on `namespaces` (kubebuilder marker in `clustersecuritybaseline_controller.go`).
 - `PROJECT` was updated by hand for this kind (no `kubebuilder` CLI available); re-run `kubebuilder edit` checks if the CLI is installed later.

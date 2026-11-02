@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/client-go/tools/record"
@@ -31,7 +32,7 @@ func (m *PodMutator) InjectDecoder(d admission.Decoder) error {
 	return nil
 }
 
-// +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create;update,versions=v1,name=mpod.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/mutate-core-v1-pod,mutating=true,failurePolicy=fail,sideEffects=None,groups="",resources=pods,verbs=create,versions=v1,name=mpod.kb.io,admissionReviewVersions=v1
 
 // Handle mutates an incoming Pod admission request by applying defaults from
 // WorkloadPolicy (labels, resource requests/limits) and injecting telemetry
@@ -46,6 +47,17 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 	if err != nil {
 		return admission.Errored(http.StatusBadRequest, err)
 	}
+
+	// Defaults apply when a Pod is created. Almost all of a running Pod's spec is
+	// immutable, so a patch on UPDATE would be rejected by the API server and
+	// would block benign updates such as relabelling.
+	if req.Operation == admissionv1.Update {
+		return admission.Allowed("mutation applies on create only")
+	}
+	if isMirrorPod(pod, req) {
+		return admission.Allowed("mirror Pod of a static Pod")
+	}
+	dryRun := isDryRun(req)
 
 	podlog.Info("Mutating Pod", "name", pod.Name, "namespace", pod.Namespace)
 
@@ -73,7 +85,7 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 		podlog.Error(selErr, "Skipping TelemetryProfile with invalid selector", "namespace", req.Namespace)
 	}
 
-	telemetryMutated := m.applyTelemetry(pod, applicableProfiles)
+	telemetryMutated := m.applyTelemetry(pod, applicableProfiles, dryRun)
 	if telemetryMutated {
 		mutated = true
 	}
@@ -92,7 +104,7 @@ func (m *PodMutator) Handle(ctx context.Context, req admission.Request) admissio
 
 		if policyMutated {
 			mutated = true
-			m.Recorder.Event(&wp, "Normal", "PodMutated", fmt.Sprintf("Applied workload policy defaults to Pod %s in namespace %s", pod.Name, pod.Namespace))
+			recordEvent(m.Recorder, dryRun, &wp, "Normal", "PodMutated", fmt.Sprintf("Applied workload policy defaults to Pod %s in namespace %s", pod.Name, pod.Namespace))
 		}
 	}
 
@@ -116,7 +128,7 @@ func telemetryProfileCandidate(p platformv1alpha1.TelemetryProfile) policy.Candi
 	return policy.Candidate{Name: p.Name, Namespace: p.Namespace, Priority: p.Spec.Priority, Targeting: p.Spec.PolicyTargeting}
 }
 
-func (m *PodMutator) applyTelemetry(pod *corev1.Pod, profiles []platformv1alpha1.TelemetryProfile) bool {
+func (m *PodMutator) applyTelemetry(pod *corev1.Pod, profiles []platformv1alpha1.TelemetryProfile, dryRun bool) bool {
 	mutated := false
 	for _, profile := range profiles {
 		if !profile.Spec.InjectEnvVars || profile.Spec.TracingEndpoint == "" {
@@ -144,7 +156,7 @@ func (m *PodMutator) applyTelemetry(pod *corev1.Pod, profiles []platformv1alpha1
 
 		if profileMutated {
 			mutated = true
-			m.Recorder.Event(&profile, "Normal", "PodMutated", fmt.Sprintf("Injected telemetry config to Pod %s in namespace %s", pod.Name, pod.Namespace))
+			recordEvent(m.Recorder, dryRun, &profile, "Normal", "PodMutated", fmt.Sprintf("Injected telemetry config to Pod %s in namespace %s", pod.Name, pod.Namespace))
 		}
 	}
 	return mutated

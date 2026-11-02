@@ -46,7 +46,7 @@ func TestPodMutatorApplyTelemetryUsesHighestPriorityFirst(t *testing.T) {
 	}
 
 	profiles, _ = policyresolver.Select(profiles, policyresolver.Subject{}, telemetryProfileCandidate)
-	mutated := mutator.applyTelemetry(pod, profiles)
+	mutated := mutator.applyTelemetry(pod, profiles, false)
 	if !mutated {
 		t.Fatalf("expected pod to be mutated")
 	}
@@ -356,7 +356,7 @@ func TestPodMutatorTelemetryDoesNotOverrideExistingEnvVars(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles)
+	mutated := mutator.applyTelemetry(pod, profiles, false)
 	if mutated {
 		t.Fatalf("expected no mutation when env var already exists")
 	}
@@ -421,7 +421,7 @@ func TestPodMutatorApplyTelemetrySkipsInitContainers(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles)
+	mutated := mutator.applyTelemetry(pod, profiles, false)
 	if !mutated {
 		t.Fatalf("expected pod to be mutated (regular container got env vars)")
 	}
@@ -491,7 +491,7 @@ func TestPodMutatorApplyTelemetryInjectEnvVarsFalseSkips(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles)
+	mutated := mutator.applyTelemetry(pod, profiles, false)
 	if mutated {
 		t.Fatalf("expected no mutation when InjectEnvVars is false")
 	}
@@ -519,7 +519,7 @@ func TestPodMutatorApplyTelemetryEmptyEndpointSkips(t *testing.T) {
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles)
+	mutated := mutator.applyTelemetry(pod, profiles, false)
 	if mutated {
 		t.Fatalf("expected no mutation when TracingEndpoint is empty")
 	}
@@ -545,7 +545,7 @@ func TestPodMutatorApplyTelemetrySamplingRateNotInjectedWhenEmpty(t *testing.T) 
 		},
 	}
 
-	mutated := mutator.applyTelemetry(pod, profiles)
+	mutated := mutator.applyTelemetry(pod, profiles, false)
 	if !mutated {
 		t.Fatalf("expected mutation (endpoint env var should be injected)")
 	}

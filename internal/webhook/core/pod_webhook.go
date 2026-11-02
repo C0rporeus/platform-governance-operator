@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/record"
@@ -64,7 +65,22 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 		return admission.Errored(http.StatusBadRequest, err)
 	}
 
+	if isMirrorPod(pod, req) {
+		return admission.Allowed("mirror Pod of a static Pod")
+	}
+
+	if req.Operation == admissionv1.Update {
+		oldPod := &corev1.Pod{}
+		if err := v.decoder.DecodeRaw(req.OldObject, oldPod); err != nil {
+			return admission.Errored(http.StatusBadRequest, err)
+		}
+		if isExemptPodUpdate(oldPod, pod) {
+			return admission.Allowed("update changes only fields exempt from policy checks")
+		}
+	}
+
 	podlog.Info("Validating Pod", "name", pod.Name, "namespace", pod.Namespace)
+	dryRun := isDryRun(req)
 
 	enforced, err := v.applicableBaselines(ctx, pod, req.Namespace)
 	if err != nil {
@@ -86,13 +102,13 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 			switch action {
 			case platformv1alpha1.EnforcementActionEnforce:
 				denialReasons = append(denialReasons, detailMsg)
-				v.Recorder.Event(eb.source, "Warning", "PodDenied", fmt.Sprintf("Denied Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
+				recordEvent(v.Recorder, dryRun, eb.source, "Warning", "PodDenied", fmt.Sprintf("Denied Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
 			case platformv1alpha1.EnforcementActionWarn:
 				warningMessages = append(warningMessages, detailMsg)
-				v.Recorder.Event(eb.source, "Warning", "PolicyViolationWarn", fmt.Sprintf("Warning for Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
+				recordEvent(v.Recorder, dryRun, eb.source, "Warning", "PolicyViolationWarn", fmt.Sprintf("Warning for Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
 			case platformv1alpha1.EnforcementActionAudit:
 				podlog.Info("Audit violation detected", "policy", eb.label, "pod", pod.Name, "namespace", pod.Namespace, "rule", violation.Rule, "iso", violation.ControlISO, "container", violation.Container)
-				v.Recorder.Event(eb.source, "Warning", "PolicyViolationAudit", fmt.Sprintf("Audit violation on Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
+				recordEvent(v.Recorder, dryRun, eb.source, "Warning", "PolicyViolationAudit", fmt.Sprintf("Audit violation on Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
 			}
 		}
 	}

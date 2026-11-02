@@ -98,6 +98,9 @@ func (r *ReadOnlyRootFilesystemRule) ISOControl() string { return isoControlA89 
 
 // Evaluate verifies that all containers have a read-only root filesystem.
 func (r *ReadOnlyRootFilesystemRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
+	if isWindowsPod(pod) {
+		return nil
+	}
 	if !baseline.Spec.ReadOnlyRootFilesystem {
 		return nil
 	}
@@ -151,6 +154,9 @@ type DisallowPrivilegeEscalationRule struct{}
 func (r *DisallowPrivilegeEscalationRule) Name() string       { return "DisallowPrivilegeEscalation" }
 func (r *DisallowPrivilegeEscalationRule) ISOControl() string { return isoControlA82 }
 func (r *DisallowPrivilegeEscalationRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
+	if isWindowsPod(pod) {
+		return nil
+	}
 	if !enabled(baseline.Spec.DisallowPrivilegeEscalation) {
 		return nil
 	}
@@ -187,6 +193,9 @@ type DropAllCapabilitiesRule struct{}
 func (r *DropAllCapabilitiesRule) Name() string       { return "DropAllCapabilities" }
 func (r *DropAllCapabilitiesRule) ISOControl() string { return isoControlA82 }
 func (r *DropAllCapabilitiesRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
+	if isWindowsPod(pod) {
+		return nil
+	}
 	if !enabled(baseline.Spec.RequireDropAllCapabilities) {
 		return nil
 	}
@@ -214,6 +223,9 @@ func validSeccomp(profile *corev1.SeccompProfile) bool {
 	return profile != nil && (profile.Type == corev1.SeccompProfileTypeRuntimeDefault || profile.Type == corev1.SeccompProfileTypeLocalhost)
 }
 func (r *SeccompProfileRule) Evaluate(pod *corev1.Pod, baseline *platformv1alpha1.SecurityBaseline) []SecurityViolation {
+	if isWindowsPod(pod) {
+		return nil
+	}
 	if !enabled(baseline.Spec.RequireSeccompProfile) {
 		return nil
 	}

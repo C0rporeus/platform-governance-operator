@@ -40,8 +40,10 @@ internal/policy/                    Pure in-memory policy resolution (no API cal
 internal/webhook/
   v1alpha1/                         CRD defaulting/validating webhooks
   core/                             Core API (Pod) webhooks
-    pod_webhook.go                  Validating webhook
+    governor.go                     Governor: the single baseline selection + evaluation path (Pod and workload webhooks)
+    pod_webhook.go                  Validating webhook (the security boundary, fails closed)
     pod_mutating_webhook.go         Mutating webhook
+    workload_webhook.go             Early validation of Deployment/StatefulSet templates (feedback, fails open)
 config/
   crd/bases/                        AUTO-GENERATED — never edit
   rbac/role.yaml                    AUTO-GENERATED — never edit
@@ -302,7 +304,7 @@ var _ = Describe("FooController", func() {
 
 ## Availability invariants
 
-`test/manifests` fails if any of these regress: every webhook has `timeoutSeconds` between 1 and 10; the Pod webhooks exclude `kube-system`, `kube-public`, `kube-node-lease`, `cert-manager` and the operator namespace by the immutable `kubernetes.io/metadata.name` label, and that namespace equals `namespace:` in `config/default/kustomization.yaml`; the manager runs at least 2 replicas with anti-affinity and a PodDisruptionBudget; the memory limit equals the request.
+`test/manifests` fails if any of these regress: every webhook has `timeoutSeconds` between 1 and 10; the Pod webhooks fail closed and the early workload validation fails open; the Pod webhooks exclude `kube-system`, `kube-public`, `kube-node-lease`, `cert-manager` and the operator namespace by the immutable `kubernetes.io/metadata.name` label, and that namespace equals `namespace:` in `config/default/kustomization.yaml`; the manager runs at least 2 replicas with anti-affinity and a PodDisruptionBudget; the memory limit equals the request.
 
 ## Policy Targeting
 
@@ -314,6 +316,17 @@ Every policy kind embeds `PolicyTargeting` (`targetRef` | `selector`; neither = 
 - **HPA ownership is per Deployment**, not per namespace: the most specific `WorkloadPolicy` with `horizontalScaling` governs each Deployment. When a Deployment stops being governed by any policy, the policy that created its managed HPA deletes it; unmanaged HPAs are never touched.
 - **Invalid selectors** are rejected by the CRD validating webhooks (`ValidateTargeting`); if one still reaches admission (webhooks disabled) it is logged and skipped.
 - The `spec.policyScope` field index is registered but admission currently lists from the namespace-scoped informer cache and filters in memory; use the index if lists ever become large.
+
+## Early workload validation (`workload_webhook.go`, ADR-0003)
+
+`vworkload.kb.io` evaluates the Pod template of a `Deployment`/`StatefulSet` with the same code Pod admission uses, so `kubectl apply` reports a violation instead of leaving a ReplicaSet that cannot create Pods.
+
+- **Feedback, not the boundary:** `failurePolicy: Ignore`, `timeoutSeconds: 3`. If the operator is down or policies cannot be read the apply goes through, and every Pod is still validated by `vpod.kb.io` (`Fail`). `test/manifests` pins both policies.
+- **One evaluation path (D2):** `Governor.Evaluate(ns, syntheticPod, subject)`. The Pod is built from the template (`podFromTemplate`: no name, no owners) and the `Subject` from the workload (`policy.SubjectForDeployment` / `SubjectForStatefulSet`). `TestEarlyValidationAndPodAdmissionAgree` fails if the two webhooks ever disagree on the same spec.
+- **Only when the template changes (D3):** `UPDATE` with an equal Pod template is admitted untouched (the controllers keep updating replicas, annotations and status of workloads that already violate a policy). `DELETE` and objects with `deletionTimestamp` are skipped. The API server also filters with a `matchCondition` (`config/webhook/patches/namespace-selector.yaml`), so the webhook is not even called for those updates.
+- **Mode (D4, `--early-validation-mode`):** `warn` (default) returns every violation as a `Warning:` (`[early]` prefix, capped at 20 plus a summary because the API server drops warning headers beyond a few KB); `enforce` rejects only `Enforce` violations; `Warn`/`Audit` baselines only warn or log in both modes. `off` does not register the handler. Violations also go to the API server audit log (`violations`, `policies` annotations) and, except on dry runs, to events (`WorkloadDenied`, `WorkloadViolationWarn`, `WorkloadViolationAudit`).
+- **Known blind spots:** labels the Pod mutator adds later (`mandatoryLabels`) and the Pod name/ReplicaSet hash are not in the template, so a `selector` that depends on them, or a `targetRef` to a `Pod` or `ReplicaSet`, does not match in the early check; Pod admission still covers them. DaemonSet, Job and CronJob get no early feedback.
+- Same namespace exclusions as the Pod webhooks (the operator namespace and `cert-manager` can never be held up by it).
 
 ## CRD validation rules (CEL) and size limits
 
@@ -350,6 +363,7 @@ Gotchas:
 | `--metrics-bind-address` | `0` | Metrics server (`:8080`, `:8443`, or `0` to disable) |
 | `--health-probe-bind-address` | `:8081` | Liveness/readiness probes |
 | `--leader-elect` | `false` | Enable leader election for HA |
+| `--early-validation-mode` | `warn` | Early validation of Deployments/StatefulSets: `off` (webhook not registered), `warn` (warnings only), `enforce` (reject what Pod admission would reject) |
 | `--enable-http2` | `false` | Disabled by default (security) |
 | `--webhook-cert-path` | `` | TLS cert directory for webhooks |
 | `--metrics-cert-path` | `` | TLS cert directory for metrics |

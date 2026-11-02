@@ -319,7 +319,19 @@ spec:
 kubectl apply --dry-run=server -f k8s/
 ```
 
-Violations of a `Deployment` surface when its ReplicaSet tries to create Pods. Check `kubectl describe rs` and the namespace events if a rollout makes no progress. Validation of `Deployment`/`StatefulSet` at apply time is planned (HU-02.3, warn mode by default).
+**Early feedback on Deployments and StatefulSets.** When you create a workload or change its Pod template, the operator evaluates the template with the same rules Pod admission will apply, and reports the result on `kubectl apply`:
+
+```text
+Warning: [early] [RunAsNonRoot / ISO/IEC 27001 A.8.2] app container 'app' must run as non-root (policy: corporate)
+deployment.apps/web configured
+```
+
+- The default mode is `warn`: you see the warnings and the workload is still applied. Platform teams can switch to `enforce` (`--early-validation-mode=enforce`) once the warnings are gone; then the apply is rejected for the violations Pod admission would reject. `off` disables it.
+- Changing only replicas, labels or annotations of the workload is not evaluated; a change to the Pod template (an image, or `kubectl rollout restart`) is.
+- It is feedback, not the security boundary: if the operator is unavailable the apply goes through, and every Pod is still validated when it is created.
+- It cannot see what the operator adds to Pods later (`mandatoryLabels`) or per-Pod names, so a policy that selects on those is only enforced at Pod admission.
+
+If a rollout still makes no progress, check `kubectl describe rs` and the namespace events: Pod admission is the final check.
 
 ---
 
@@ -429,7 +441,7 @@ The suite uses its own kubeconfig (`bin/e2e-kubeconfig`) and refuses to run agai
 
 ## 11. Known limitations
 
-- Only Pods are validated today. `Deployment`/`StatefulSet` early feedback is in progress (HU-02.3).
+- Only Pods are enforced. `Deployment` and `StatefulSet` get early feedback (warnings by default); `DaemonSet`, `Job` and `CronJob` do not, and are validated when their Pods are created.
 - Ephemeral containers (`kubectl debug`) are added through a subresource that the webhooks do not intercept.
 - `mandatoryLabels` are added to Pods, not to their owning workloads.
 - ISO/IEC 27001 control references in messages are an interpretation pending confirmation by your ISMS owner. Treat them as traceability hints, not as audit evidence.

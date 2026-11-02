@@ -16,7 +16,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
-	platformv1alpha1 "github.com/f3nr1r/platform-governance-operator/api/v1alpha1"
 	"github.com/f3nr1r/platform-governance-operator/internal/policy"
 )
 
@@ -76,22 +75,20 @@ func (v *PodValidator) Handle(ctx context.Context, req admission.Request) admiss
 		return admission.Errored(http.StatusInternalServerError, err)
 	}
 
-	var denialReasons []string
-	var warningMessages []string
+	outcome := Classify(findings)
+	var denialReasons, warningMessages []string
 
-	for _, f := range findings {
-		detailMsg := f.Message()
-		switch f.Action {
-		case platformv1alpha1.EnforcementActionEnforce:
-			denialReasons = append(denialReasons, detailMsg)
-			recordEvent(v.Recorder, dryRun, f.Source, "Warning", "PodDenied", fmt.Sprintf("Denied Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
-		case platformv1alpha1.EnforcementActionWarn:
-			warningMessages = append(warningMessages, detailMsg)
-			recordEvent(v.Recorder, dryRun, f.Source, "Warning", "PolicyViolationWarn", fmt.Sprintf("Warning for Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
-		case platformv1alpha1.EnforcementActionAudit:
-			podlog.Info("Audit violation detected", "policy", f.Policy, "pod", pod.Name, "namespace", pod.Namespace, "rule", f.Violation.Rule, "iso", f.Violation.ControlISO, "container", f.Violation.Container)
-			recordEvent(v.Recorder, dryRun, f.Source, "Warning", "PolicyViolationAudit", fmt.Sprintf("Audit violation on Pod %s in namespace %s: %s", pod.Name, pod.Namespace, detailMsg))
-		}
+	for _, f := range outcome.Enforce {
+		denialReasons = append(denialReasons, f.Message())
+		recordEvent(v.Recorder, dryRun, f.Source, "Warning", "PodDenied", fmt.Sprintf("Denied Pod %s in namespace %s: %s", pod.Name, pod.Namespace, f.Message()))
+	}
+	for _, f := range outcome.Warn {
+		warningMessages = append(warningMessages, f.Message())
+		recordEvent(v.Recorder, dryRun, f.Source, "Warning", "PolicyViolationWarn", fmt.Sprintf("Warning for Pod %s in namespace %s: %s", pod.Name, pod.Namespace, f.Message()))
+	}
+	for _, f := range outcome.Audit {
+		podlog.Info("Audit violation detected", "policy", f.Policy, "pod", pod.Name, "namespace", pod.Namespace, "rule", f.Violation.Rule, "iso", f.Violation.ControlISO, "container", f.Violation.Container)
+		recordEvent(v.Recorder, dryRun, f.Source, "Warning", "PolicyViolationAudit", fmt.Sprintf("Audit violation on Pod %s in namespace %s: %s", pod.Name, pod.Namespace, f.Message()))
 	}
 
 	if len(denialReasons) > 0 {

@@ -35,6 +35,32 @@ type Finding struct {
 	Policy string
 }
 
+// Outcome groups findings by the enforcement action of the baseline that raised them.
+type Outcome struct {
+	// Enforce findings reject the request (or are downgraded to warnings by a caller).
+	Enforce []Finding
+	// Warn findings are admitted with a warning shown to the client.
+	Warn []Finding
+	// Audit findings are admitted silently and only recorded.
+	Audit []Finding
+}
+
+// Classify splits findings by enforcement action, keeping their order.
+func Classify(findings []Finding) Outcome {
+	var out Outcome
+	for _, f := range findings {
+		switch f.Action {
+		case platformv1alpha1.EnforcementActionEnforce:
+			out.Enforce = append(out.Enforce, f)
+		case platformv1alpha1.EnforcementActionWarn:
+			out.Warn = append(out.Warn, f)
+		case platformv1alpha1.EnforcementActionAudit:
+			out.Audit = append(out.Audit, f)
+		}
+	}
+	return out
+}
+
 // Message renders the finding as shown to users in denials, warnings and events.
 func (f Finding) Message() string {
 	return fmt.Sprintf("[%s / %s] %s (policy: %s)", f.Violation.Rule, f.Violation.ControlISO, f.Violation.Message, f.Policy)

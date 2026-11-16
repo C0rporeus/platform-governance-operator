@@ -208,8 +208,9 @@ func main() {
 	}
 
 	if err := (&controller.SecurityBaselineReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		OperatorNamespace: os.Getenv("POD_NAMESPACE"),
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
 		//nolint:staticcheck // controller-runtime recorder migration pending
 		Recorder: mgr.GetEventRecorderFor("securitybaseline-controller"),
 	}).SetupWithManager(mgr); err != nil {
@@ -217,8 +218,9 @@ func main() {
 		os.Exit(1)
 	}
 	if err := (&controller.ClusterSecurityBaselineReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		OperatorNamespace: os.Getenv("POD_NAMESPACE"),
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
 		//nolint:staticcheck // controller-runtime recorder migration pending
 		Recorder: mgr.GetEventRecorderFor("clustersecuritybaseline-controller"),
 	}).SetupWithManager(mgr); err != nil {

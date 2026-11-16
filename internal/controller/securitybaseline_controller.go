@@ -31,8 +31,9 @@ import (
 // SecurityBaselineReconciler reconciles a SecurityBaseline object
 type SecurityBaselineReconciler struct {
 	client.Client
-	Scheme   *runtime.Scheme
-	Recorder record.EventRecorder
+	Scheme            *runtime.Scheme
+	Recorder          record.EventRecorder
+	OperatorNamespace string
 }
 
 // +kubebuilder:rbac:groups=core.platform.f3nr1r.io,resources=securitybaselines,verbs=get;list;watch
@@ -68,7 +69,12 @@ func (r *SecurityBaselineReconciler) Reconcile(ctx context.Context, req ctrl.Req
 		log.V(1).Info("Skipping status update; SecurityBaseline already marked Available", "name", baseline.Name, "namespace", baseline.Namespace)
 	}
 
-	return ctrl.Result{}, nil
+	report, err := (&AuditReconciler{Client: r.Client, OperatorNamespace: r.OperatorNamespace}).Assess(ctx, &baseline)
+	if err := persistAudit(ctx, r.Client, r.Recorder, &baseline, report, err); err != nil {
+		return ctrl.Result{}, err
+	}
+	log.Info("Assessed existing Pods", "evaluated", report.Evaluated, "violating", report.Violating, "complete", report.Complete)
+	return ctrl.Result{RequeueAfter: AuditInterval}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

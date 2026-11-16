@@ -292,6 +292,26 @@ Realisation lists the artefacts that implement a decision today; "design only" m
 | DD-14 | `reconcile_status_helper.go`; `logcheck` in `.golangci.yml`; `ISOControl()` in `evaluator.go` | Integration smoke specs for the four controllers assert the `Available` condition |
 | DD-15 | `internal/**/_test.go`, `test/integration/`, `test/e2e/`, `.golangci.yml`, `.github/workflows/test.yml` | The suites themselves; `make test` and `make lint` |
 
+### Continuous assessment implementation note (2026-11-06, `TASK-02.7.1`)
+
+`internal/controller/audit_scan.go` reuses `Governor.Evaluate` for existing Pods. Both baseline controllers trigger assessment on policy reconciliation and requeue after five minutes. The generated RBAC adds only `get/list/watch` on Pods, required for informer-backed assessment; it grants no Pod writes. This extends the realisation of DD-13/DD-14, without introducing a new normative mapping.
+
+Each policy cycle inspects at most 500 Pods in applicable namespaces; namespace exclusions and selectors are reused from `internal/policy`. Errors are returned, and reaching the budget with remaining Pods returns `Complete=false`. The budget bounds inspections/evaluations, not informer memory or cache List allocation. Over-budget scopes remain partial; this implementation does not rotate a cursor or claim eventual full coverage. Status summaries, examples, completeness conditions and transition events remain pending in `TASK-02.7.2`; this block only logs assessment results. The cache is eventually consistent and the report is not a transactional snapshot of all policies.
+
+Verification: `test/integration/audit_scan_test.go` covers namespace and workload targeting, unrelated baseline findings, inspection limits, read errors, invalid selectors, and policy edits over an existing Pod. The existing controller smoke tests check that repeated reconciliation leaves unchanged status untouched. Runtime RBAC and the complete operational flow still require the E2E work of `TASK-02.7.3`.
+
+### Compliance status implementation note (2026-11-06, `TASK-02.7.2`)
+
+The status persistence mentioned as pending above is now implemented in `internal/controller/audit_status.go` for both baseline kinds. `status.compliance` records the observed generation, inspected/evaluated/violating Pod counts, completeness and up to ten namespace/Pod/rule examples. Examples contain no workload manifests or container payloads. Namespace and Pod traversal are sorted to keep unchanged assessments stable. A Pod violating several rules contributes once to the violating count.
+
+`Compliant=True` requires a complete successful scan with no confirmed violations; a complete scan with violations yields `False`. Partial scans and errors yield `Unknown`, with distinct `AssessmentIncomplete`/`AssessmentFailed` reasons. Error details are returned for controller logging, not copied into status. Failure invalidates the prior successful summary rather than leaving stale conformity visible. Empty scope reports zero evaluated Pods explicitly; this describes observed resources, not certification of future workloads.
+
+Unchanged results do not write status; condition transition time is managed by `metav1.Condition`. Events are emitted only after a successful status write and only when the condition status changes (including first observation). The condition and summary identify their observed generation; eventual consistency and the inspection budget remain limitations. `audit_status_test.go` checks state semantics, persisted failure, idempotence, transition events and failed writes. Integration tests check CRD persistence and bounded examples. The operational E2E gate remains `TASK-02.7.3`.
+
+### Operational verification (2026-11-06, `TASK-02.7.3`)
+
+The operational gate above is now verified: `make test-e2e` passed 28/28 specs on an isolated three-node Kind cluster, including legacy Pod assessment, actual periodic convergence without a policy edit, status generations/examples, transition events, mode promotion and unchanged-status idempotence. Both namespaced and cluster baseline status were exercised with deployed RBAC. The cluster was deleted afterwards. [Evidence, versions and limits](evidence/continuous-audit-e2e-2026-11-06.md) and [runbook](RUNBOOK-COMPLIANCE.md) record the result. Partial-scan and failure semantics remain covered by unit/integration tests; no support-matrix or normative approval is inferred from this execution.
+
 ---
 
 ## 7. Deviations from sources

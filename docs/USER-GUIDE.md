@@ -142,6 +142,8 @@ The Pod webhooks additionally never receive requests from `kube-system`, `kube-p
 
 Never introduce a new rule straight into `Enforce` on a busy cluster.
 
+Follow the [continuous compliance runbook](RUNBOOK-COMPLIANCE.md) for exact commands, expected results, recovery and responsibility boundaries. Existing Pods are assessed after baseline changes and periodically; inspect `status.compliance` and the `Compliant` condition, including `observedGeneration` and `complete`, before promotion. `Unknown` or zero evaluated Pods cannot establish application compliance. Events alone are insufficient evidence.
+
 1. **Audit.** Create the baseline with `enforcementAction: Audit`. Nothing is blocked. Collect violations:
    ```bash
    kubectl get events -A --field-selector reason=PolicyViolationAudit
@@ -151,7 +153,7 @@ Never introduce a new rule straight into `Enforce` on a busy cluster.
    ```text
    Warning: [ReadOnlyRootFilesystem / ISO/IEC 27001 A.8.9] app container 'web' must have read-only root filesystem (policy: corporate)
    ```
-4. **Enforce.** Switch to `Enforce` once the audit events stop. Do it namespace by namespace, or use a `selector` per team.
+4. **Enforce.** Switch to `Enforce` after a complete, current-generation assessment with no violations, representative staging admission tests and approval by the control owner. Do it namespace by namespace, or use a `selector` per team. Enforcement does not evict existing Pods.
 
 **Ratchet with layers.** Keep the corporate `ClusterSecurityBaseline` at the level everybody meets. Raise stricter rules through namespaced `SecurityBaseline`s for teams that are ready.
 
@@ -495,8 +497,24 @@ The suite uses its own kubeconfig (`bin/e2e-kubeconfig`) and refuses to run agai
 
 ## 11. Known limitations
 
+### Operating with incomplete early feedback (`TASK-02.6.10`)
+
+An accepted workload or a clean early-warning gate does not establish compliance of its future Pods. Check the following before promoting a policy from `Audit` to `Warn` or `Enforce`:
+
+| Case | Early feedback coverage | Operational action / owner |
+| :--- | :--- | :--- |
+| Argo Rollouts, Knative or another custom controller | Its custom resource is outside the workload webhook's supported kinds. A server-side dry run of that resource does not create its children. | Platform Engineer: test the controller in an isolated staging namespace, observe the actual generated Pods and their admission events, and use selectors on stable Pod labels. Verify direct owner matching before relying on a custom `targetRef`; arbitrary ancestor traversal is not supported. |
+| Third-party mutation with `template` fidelity | Only this operator's defaults are applied to the template. | Platform Engineer and SecOps: validate injected sidecars/agents in staging. If additional fidelity is needed, review and install the guarded `config/dry-run` overlay described in section 7. |
+| Optional `dry-run` fidelity | A synthetic Pod uses a synthetic hash, UID and controller metadata; it does not predict every future Pod or controller-dependent injector. Errors and timeouts fall back to the template result. | SRE: inspect operator logs for `Dry run gave no verdict; using the template result` and startup safeguard messages. Record a fallback as missing early evidence and repeat the test with real controller-generated Pods in staging. |
+| Generated names, labels or identity-dependent webhooks | Synthetic names/owners and the operator's API identity can differ from the real controller request. | Policy author: prefer stable labels or a supported workload target; verify the actual Pod's identity-dependent admission separately. |
+| Workloads already running before a policy change | Continuous assessment evaluates existing Pods, with a 500-Pod inspection budget per policy/cycle. | SecOps: inspect current-generation summary and coverage using the runbook; partial coverage is Unknown and early feedback alone cannot close this control. |
+
+For a supported workload, run `hack/ci/check-early-warnings.sh --context <staging-context> -f <manifests>` and retain its output and exit code with the tested policy and operator revisions. For a custom controller, also retain the real Pod admission result and workload events from staging. A successful gate only covers the requests it submitted; readiness does not prove that every webhook or dry-run dependency responded.
+
+If a policy blocks generated Pods, the application owner corrects the template or injector configuration and repeats the staging test. SecOps approves any policy change or scoped exception through the established change process; SRE investigates operator availability and fallback. Avoid deleting a baseline or disabling Pod admission as a diagnostic step. The ISMS owner validates normative mappings and accepts residual compliance risk; technical test results alone do not provide that approval.
+
 - Only Pods are enforced. `Deployment`, `StatefulSet`, `DaemonSet`, `Job` and `CronJob` get early feedback (warnings by default); Pods created by other controllers are validated when they are created.
-- Workloads that were already running when a policy was created are not re-evaluated; the early check only looks at template changes. A continuous audit of existing workloads is planned (`HU-02.5`).
+- Continuous audit of existing Pods is bounded to 500 inspections per policy/cycle, without a continuation cursor. Larger scopes remain partial; `Compliant=Unknown` must not be treated as a passing audit. The informer cache is eventually consistent and is not a transactional snapshot.
 - Warnings are informational. To make them a change-control gate, use `hack/ci/check-early-warnings.sh` in your pipeline (see section 7).
 - If a policy targets a `Pod` or `ReplicaSet` by name, or selects on a label that workload controllers add (`pod-template-hash`, `job-name`, ...), the operator accepts it with a warning on `kubectl apply`: it is only matched when Pods are created, not in the early check. Prefer a `targetRef` to the Deployment or a selector on your own labels.
 - Pods created by controllers outside Kubernetes (for example Argo Rollouts) get no early feedback; Pod admission validates them.

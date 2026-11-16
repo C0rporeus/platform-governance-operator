@@ -262,6 +262,57 @@ spec:
           status:
             description: status defines the observed state of ClusterSecurityBaseline
             properties:
+              compliance:
+                description: Compliance is the latest audit of existing Pods, not
+                  an admission verdict.
+                properties:
+                  complete:
+                    type: boolean
+                  evaluated:
+                    description: Evaluated counts applicable Pods evaluated successfully.
+                    minimum: 0
+                    type: integer
+                  examples:
+                    description: Examples contains at most ten confirmed rule violations.
+                    items:
+                      description: ComplianceExample identifies an observed rule violation
+                        without copying the Pod spec.
+                      properties:
+                        namespace:
+                          type: string
+                        pod:
+                          type: string
+                        rule:
+                          type: string
+                      required:
+                      - namespace
+                      - pod
+                      - rule
+                      type: object
+                    maxItems: 10
+                    type: array
+                  inspected:
+                    description: Inspected includes Pods examined but excluded by
+                      workload targeting.
+                    minimum: 0
+                    type: integer
+                  observedGeneration:
+                    description: ObservedGeneration is the baseline generation assessed
+                      by this report.
+                    format: int64
+                    type: integer
+                  violating:
+                    description: Violating counts Pods with at least one confirmed
+                      violation of this baseline.
+                    minimum: 0
+                    type: integer
+                required:
+                - complete
+                - evaluated
+                - inspected
+                - observedGeneration
+                - violating
+                type: object
               conditions:
                 description: conditions represent the current state of the ClusterSecurityBaseline
                   resource.

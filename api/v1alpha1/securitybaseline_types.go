@@ -110,6 +110,9 @@ type SecurityBaselineSpec struct {
 
 // SecurityBaselineStatus defines the observed state of SecurityBaseline.
 type SecurityBaselineStatus struct {
+	// Compliance is the latest audit of existing Pods, not an admission verdict.
+	// +optional
+	Compliance *ComplianceSummary `json:"compliance,omitempty"`
 	// For Kubernetes API conventions, see:
 	// https://github.com/kubernetes/community/blob/master/contributors/devel/sig-architecture/api-conventions.md#typical-status-properties
 

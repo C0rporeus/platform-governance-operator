@@ -39,6 +39,9 @@ type ClusterSecurityBaselineSpec struct {
 
 // ClusterSecurityBaselineStatus defines the observed state of ClusterSecurityBaseline.
 type ClusterSecurityBaselineStatus struct {
+	// Compliance is the latest audit of existing Pods, not an admission verdict.
+	// +optional
+	Compliance *ComplianceSummary `json:"compliance,omitempty"`
 	// conditions represent the current state of the ClusterSecurityBaseline resource.
 	// +listType=map
 	// +listMapKey=type
